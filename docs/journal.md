@@ -127,3 +127,23 @@
   (3) 同模式 sandbox 升级在 "never" 审批下直接放行（补丁上线，可直接用
       `sandbox_permissions: danger-full-access` 同模式请求验证不再报错）；
   (4) 浏览器刷新后新会话选「mydsh 模式」实测。
+
+## 2026-08-15 目标回合 2 — 通知链路线上实证 + 安排重启
+
+- [V] **通知链路线上实证成功**：`$DSH_HOME/mydsh/notify.jsonl` 出现真实事件
+  `{"event":"agent-idle","sessionId":"session-aad3f8e5-..."}`（17:33:23 UTC+8）。
+  aad3f8e5 即**本会话**（mydsh 工作区）—— 说明：
+  - host 行确实挂载、监听器确实收到 agent/status、running→idle 下降沿判定正确、
+    JSONL 落盘正确（此前空日志是挂载/事件时机问题，机制本身无问题）。
+  - 本会话（含 goal 自动续跑）也会正常切换 running/idle。
+- [D] 用户未在回合间重启（旧 PID 194873 仍在，8/14 启动）。media.ts 修复与 sandbox
+  补丁必须重启才生效。为避免再等一个回合，安排**延迟受保护重启**：
+  `setsid bash -c 'sleep 45; kill -0 194873 && restart.sh'` —— 先让本回合消息送达，
+  45 秒后由独立进程执行 restart.sh（杀旧进程 → 同款命令拉起 → 等端口就绪）。
+  会话数据持久化，重启不丢；重启后 goal 会 disarm，用户说「继续」后 resume 并做最终验证。
+- [TODO] 重启后最终验证清单：
+  (1) notify.jsonl 出现 `plugin-started` 心跳 + 每次 agent-status 记录（新模块生效）；
+  (2) `/mydsh-media` 真实文件 200/206（修复上线）；
+  (3) 同模式 `sandbox_permissions: danger-full-access` 在审批 "never" 下直接放行
+      （补丁上线，不再报 "not strictly wider"）；
+  (4) boot 图仍含 4 个 @mydsh 客户端插件。
