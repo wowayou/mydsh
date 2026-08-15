@@ -1,13 +1,12 @@
-// mydsh ui-session-tabs — browser-side: open session in new tab + URL deep-linking.
+// mydsh ui-session-tabs — 浏览器半边：多会话「新标签页打开」。
 //
-// Two pieces:
-// 1. "Open in new tab" button in conversation.session.header.actions
-//    (the session header action row — the three-dots area on each session).
-//    Uses sessionId from PropsRuntime framework kit.
-// 2. URL session opener: null component in conversation.input.dock that reads
-//    ?session=<id> from the URL and opens the matching session.
-//
-// Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
+// 手写 __ModuleLoader__ bundle（零构建依赖）：只 require 平台模块表里的 react。
+// 机制：
+//   1. 会话头注册「⧉」按钮：把当前会话的深链 `?session=<id>` 复制到剪贴板并
+//      在新标签页打开。每个标签页的会话选择存在各自的内存态里（localStorage
+//      只是重载种子），互不干扰。
+//   2. 页面加载时读 `?session=`：等会话列表就绪且包含目标后 `sessions.open(id)`，
+//      实现「不同标签页访问同一地址、各选各的会话」。
 window.__ModuleLoader__.load({
 	id: '@mydsh/ui-session-tabs',
 	factory: (require) => {
@@ -19,13 +18,14 @@ window.__ModuleLoader__.load({
 		function isZh() {
 			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
 		}
-		var T = isZh()
-			? { openTab: '在新标签页打开本会话（链接已复制）', copied: '✓' }
-			: { openTab: 'Open this session in a new tab (link copied)', copied: '✓' };
+		const T = isZh()
+			? { openTab: '在新标签页打开本会话（链接已复制）', copied: '已复制', open: '在新标签页打开' }
+			: { openTab: 'Open this session in a new tab (link copied)', copied: 'Copied', open: 'Open in new tab' };
 
+		/** 组装深链：当前地址 + ?session=<id>（保留其它参数）。 */
 		function deepLink(sessionId) {
 			try {
-				var u = new URL(window.location.href);
+				const u = new URL(window.location.href);
 				u.searchParams.set('session', String(sessionId));
 				return u.toString();
 			} catch {
@@ -33,28 +33,27 @@ window.__ModuleLoader__.load({
 			}
 		}
 
-		// "Open in new tab" button for the session header action row.
+		/** 会话头按钮：复制深链 + 新标签页打开。 */
 		function OpenTabAction(props) {
-			var sessionId = props.sessionId;
-			var state = useState(false);
-			var copied = state[0]; var setCopied = state[1];
-			var timer = useRef(undefined);
+			const sessionId = props.sessionId;
+			const [copied, setCopied] = useState(false);
+			const timer = useRef(undefined);
 
-			useEffect(function() { return function() {
+			useEffect(() => () => {
 				if (timer.current !== undefined) clearTimeout(timer.current);
-			}; }, []);
+			}, []);
 
-			var onClick = useCallback(function() {
-				var url = deepLink(sessionId);
+			const onClick = useCallback(() => {
+				const url = deepLink(sessionId);
 				try {
 					if (navigator.clipboard && navigator.clipboard.writeText) {
-						navigator.clipboard.writeText(url).catch(function() {});
+						navigator.clipboard.writeText(url).catch(() => {});
 					}
 				} catch {}
 				try { window.open(url, '_blank'); } catch {}
 				setCopied(true);
 				if (timer.current !== undefined) clearTimeout(timer.current);
-				timer.current = setTimeout(function() { setCopied(false); }, 1500);
+				timer.current = setTimeout(() => setCopied(false), 1500);
 			}, [sessionId]);
 
 			return createElement('button', {
@@ -63,21 +62,22 @@ window.__ModuleLoader__.load({
 				style: {
 					background: 'transparent', border: 'none', cursor: 'pointer',
 					color: copied ? 'var(--dsw-alias-state-success-primary, #3fae6a)' : 'var(--dsw-alias-label-secondary, #9aa3b2)',
-					fontSize: '14px', padding: '2px 6px', borderRadius: 6, lineHeight: 1,
+					fontSize: '13px', padding: '2px 6px', borderRadius: 6,
 				},
-			}, copied ? T.copied : '⧉');
+			}, copied ? '✓' : '⧉');
 		}
 
-		// URL session opener: null component, opens session from ?session=<id>.
+		/** 深链打开器：渲染 null，加载时按 URL 选择会话。sessions 服务经 apply 闭包注入。 */
 		function UrlSessionOpener(props) {
-			var useSessions = props.useSessions;
-			var sessions = props.sessions;
-			var target = useMemo(function() {
+			const useSessions = props.useSessions;
+			const target = useMemo(() => {
 				try { return new URLSearchParams(window.location.search).get('session'); } catch { return null; }
 			}, []);
-			var listed = useSessions(function(s) { return s && s.phase === 'ready' && target !== null && s.ids.indexOf(target) !== -1; });
-			var opened = useRef(false);
-			useEffect(function() {
+			const sessions = sessionsService;
+			// 等待列表 ready 且包含目标（phase: 'pending' | 'ready'）。
+			const listed = useSessions((s) => s && s.phase === 'ready' && target !== null && s.ids.indexOf(target) !== -1);
+			const opened = useRef(false);
+			useEffect(() => {
 				if (!listed || opened.current || sessions === undefined || sessions === null) return;
 				opened.current = true;
 				try { sessions.open(target); } catch {}
@@ -85,14 +85,16 @@ window.__ModuleLoader__.load({
 			return null;
 		}
 
+		/** apply 时捕获的 sessions 服务（组件经闭包使用；避免在组件里直接访问 ctx）。 */
+		let sessionsService = undefined;
+
 		module.exports = {
 			name: '@mydsh/ui-session-tabs',
 			inject: ['slots', 'sessions'],
 			apply(ctx) {
-				var sessions = ctx.get('sessions');
-				var slots = ctx.get('slots');
+				sessionsService = ctx.get('sessions');
+				const slots = ctx.get('slots');
 				if (slots === undefined) return;
-				// 1. "Open in new tab" button in session header actions (three dots area)
 				ctx.effect(
 					() => slots.inject('conversation.session.header.actions', () => slots.register({
 						name: 'conversation.session.header.actions',
@@ -101,13 +103,12 @@ window.__ModuleLoader__.load({
 					}, OpenTabAction)),
 					'@mydsh/ui-session-tabs: open-tab action',
 				);
-				// 2. URL session opener (null component in input dock)
 				ctx.effect(
-					() => slots.inject('conversation.input.dock', (ownerProps) => slots.register({
-						name: 'conversation.input.dock',
+					() => slots.inject('conversation.session.header.actions', () => slots.register({
+						name: 'conversation.session.header.actions',
 						id: 'mydsh-url-session',
-						order: 50,
-					}, (props) => UrlSessionOpener({ ...props, sessions }))),
+						order: 40,
+					}, UrlSessionOpener)),
 					'@mydsh/ui-session-tabs: url opener',
 				);
 			},
