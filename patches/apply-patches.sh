@@ -41,7 +41,7 @@ else
 fi
 
 # --- Patch 3: per-provider UA override (profile.headers wins) ---
-PERPROVIDER_MARKER="per-provider .user-agent"
+PERPROVIDER_MARKER="per-provider UA override"
 PERPROVIDER_TARGET="$CHECKOUT/packages/llm/llm-pi-ai/src/adapter.ts"
 
 if [ -f "$PERPROVIDER_TARGET" ] && grep -qF "$PERPROVIDER_MARKER" "$PERPROVIDER_TARGET"; then
