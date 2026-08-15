@@ -251,3 +251,23 @@
   - 幂等性：install.sh 连续两次零漂移。
 - [D] **当前项目状态**：v0.1 收敛完成，可作为 dsh-plugin 生态示例使用。
   待办项（v2）：通知去重/合并、多图视觉、勿扰/摘要、健康检查、批注进对话。
+
+## 2026-08-16 新建会话崩溃修复
+
+- [F] **严重 bug**：给 vision-tool 的 agent.cordis.yml 行加 config 块后，
+  新建会话完全失效。根因：Cordis resolveConfig() 在插件有 config 时检查
+  runtime.Config（schemastery schema），但 vision-tool.ts 只导出 TypeScript
+  interface（运行时擦除），没有 export const Config。config 验证行为异常，
+  预设加载崩溃，错误被静默吞掉。
+- [A] 排查过程：
+  1. 回退所有客户端 bundle 到原始版本 → 仍不行
+  2. 撤销所有 checkout 补丁 + 清空 patch 文件 → 仍不行
+  3. 把 settings.yaml 的 agent-presets.default 从 mydsh 改成 standard → 能建了
+  4. 在 mydsh 预设里逐行注释自定义插件 → 定位到 vision-tool 的 config 块
+- [F] 修复：移除 agent.cordis.yml 里 mydsh-vision 行的 config 块。
+  vision-tool.ts 内部已有默认值，不需要外部 config。
+- [D] **教训记录到 POSTMORTEM.md 坑 6**：
+  不要给本地插件（./xxx.ts）的 YAML 行加 config 块，
+  除非该插件导出了 schemastery Config schema。TypeScript interface 不算。
+  排查预设加载问题最快的方法：把 default 改成 standard。
+- [V] preset check 31/31 通过；smoke 23/23 通过。

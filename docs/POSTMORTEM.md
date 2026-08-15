@@ -69,6 +69,28 @@ useEffect 直到标签页重新可见才触发，此时 document.hidden 已为 f
 根因：没有走 cordis effect 生命周期，插件卸载时不会自动清理。
 教训：所有资源都要通过 ctx.effect 或 useEffect cleanup 管理，不要旁路到全局变量。
 
+
+### 坑 6：Cordis config 块导致预设加载崩溃
+
+现象：给 vision-tool 的 agent.cordis.yml 行加了 config 块后，
+新建会话功能完全失效（预设加载崩溃，且错误被静默吞掉）。
+
+根因：Cordis 的 resolveConfig() 在插件有 config 时会检查 runtime.Config
+（schemastery schema）。我们的 vision-tool.ts 只导出了 TypeScript interface
+（运行时被擦除），没有导出 export const Config（schemastery schema）。
+当 YAML 里有 config 块时，Cordis 尝试验证 config，在没有 schema 的情况下
+行为异常，导致预设加载崩溃。错误没有明显日志输出（在终端 stderr 上），
+从 AI agent 侧完全看不到。
+
+教训：
+1. 不要给本地插件（./xxx.ts）的 YAML 行加 config 块，除非该插件导出了
+   export const Config（schemastery schema）。TypeScript interface 不算。
+2. 如果要传配置，要么在插件源码里写默认值，要么导出 schemastery schema。
+3. 新会话创建失败时，首先检查 settings.yaml 的 agent-presets.default
+   指向的预设是否能正常加载（临时改成 standard 排除预设问题）。
+4. 排查预设加载问题最快的方法：在 settings.yaml 里把 default 改成 standard，
+   如果能建会话，就是预设的问题；然后在预设里逐行注释自定义插件行。
+
 ## 13 条社区建议采纳状态
 
 | # | 建议 | 状态 | 理由 |
