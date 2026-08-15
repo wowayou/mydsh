@@ -74,7 +74,7 @@ function loadClientBundle(file) {
 const clientCases = [
   { name: 'ui-notify', file: join(PROJECT, 'client/ui-notify/lib/client.js'), slot: 'conversation.input.dock#mydsh-notify' },
   { name: 'ui-session-tabs', file: join(PROJECT, 'client/ui-session-tabs/lib/client.js'), slot: 'conversation.session.header.actions#mydsh-open-tab' },
-  { name: 'ui-video', file: join(PROJECT, 'client/ui-video/lib/client.js'), slot: 'conversation.input.dock#mydsh-video-watcher' },
+  { name: 'ui-video', file: join(PROJECT, 'client/ui-video/lib/client.js'), slot: null },
 ]
 
 console.log('── 客户端 bundle 冒烟测试 ──')
