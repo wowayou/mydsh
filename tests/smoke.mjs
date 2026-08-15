@@ -8,7 +8,10 @@ import vm from 'node:vm'
 
 const require = createRequire(import.meta.url)
 const PROJECT = dirname(dirname(fileURLToPath(import.meta.url)))
-const PROFILE_NM = '/home/forbackup/.dsh/profiles/node_modules'
+// Module resolution uses the real DSH_HOME (where react/yaml live);
+// DSH_HOME env var isolates notify.jsonl writes to a temp dir.
+const REAL_DSH_HOME = require('node:os').homedir() + '/.dsh'
+const PROFILE_NM = process.env.MYDSH_PROFILE_NM ?? join(REAL_DSH_HOME, 'profiles/node_modules')
 
 let failures = 0
 const check = (name, cond, extra = '') => {
@@ -72,7 +75,7 @@ const clientCases = [
   { name: 'ui-notify', file: join(PROJECT, 'client/ui-notify/lib/client.js'), slot: 'conversation.input.dock#mydsh-notify' },
   { name: 'ui-annotate', file: join(PROJECT, 'client/ui-annotate/lib/client.js'), slot: 'conversation.chat.assistant-actions#mydsh-annotate' },
   { name: 'ui-session-tabs', file: join(PROJECT, 'client/ui-session-tabs/lib/client.js'), slot: 'conversation.session.header.actions#mydsh-open-tab' },
-  { name: 'ui-video', file: join(PROJECT, 'client/ui-video/lib/client.js'), slot: null },
+  { name: 'ui-video', file: join(PROJECT, 'client/ui-video/lib/client.js'), slot: 'conversation.input.dock#mydsh-video-watcher' },
 ]
 
 console.log('── 客户端 bundle 冒烟测试 ──')

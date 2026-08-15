@@ -6,15 +6,19 @@
 import { createRequire } from 'node:module'
 import { existsSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 // yaml 从 profile node_modules 解析（heal 生成的扁平依赖，含 yaml）。
-const harnessRequire = createRequire('/home/forbackup/.dsh/profiles/node_modules/yaml/package.json')
+// Module resolution uses the real DSH_HOME (where yaml lives);
+// DSH_HOME env var isolates test data to a temp dir.
+const REAL_DSH_HOME = join(homedir(), '.dsh')
+const harnessRequire = createRequire(join(REAL_DSH_HOME, 'profiles/node_modules/yaml/package.json'))
 const yaml = harnessRequire('yaml')
 
 const require = createRequire(import.meta.url)
-const PRESET_DIR = process.argv[2] ?? '/home/forbackup/.dsh/.agent-presets/mydsh'
-const HARNESS_BASE = process.argv[3] ?? '/home/forbackup/deepseek-harness/apps/cli'
+const PRESET_DIR = process.argv[2] ?? join(REAL_DSH_HOME, '.agent-presets/mydsh')
+const HARNESS_BASE = process.argv[3] ?? join(homedir(), 'deepseek-harness/apps/cli')
 const COMPOSE = join(PRESET_DIR, 'agent.cordis.yml')
 
 let failures = 0

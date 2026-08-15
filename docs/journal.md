@@ -175,3 +175,20 @@
 - [D] 按 CONTRIBUTING.md 指引：DSH 暂不接受外部 PR，社区贡献方式 =
   创建插件 + 关联 `dsh-plugin` topic。mydsh 作为一个完整个人 Agent 系统
   （四层架构：补丁 / 主机 / 预设 / 浏览器），作为 dsh-plugin 生态示例发布。
+
+## 2026-08-15 HMR 根因定位与修复
+
+- [F] **Config HMR 根因定位**：DSH web profile 的 cordis.patch.yml 热重载依赖
+  cordis-plugin-hmr 服务。该服务的构造需要访问 Node.js 内部模块加载器
+  (loader.internal)，通过两条路径：
+  1. --expose-internals 进程标志
+  2. node-addon-require-builtin 回退
+  在当前运行环境中，虽然 node-addon-require-builtin 存在于 profile node_modules，
+  但在 dsh 进程上下文中未生效。profile-boot.ts 在 try/catch 中静默吞掉了
+  HMR 服务启动失败，导致 watchUserPatches 从未执行。
+- [A] **修复**：restart.sh 的启动命令加 --expose-internals 标志：
+  node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port 3081
+  这样 loader.internal 直接可用，HMR 服务正常启动，
+  cordis.patch.yml 编辑即时生效（增删插件行无需重启进程）。
+- [D] 模块级热重载（插件 .ts 源码变更自动重新导入）在 web profile 仍被禁用
+  (web-app bundle: hmr: disabled: true)，需 pnpm run dev:web 重建 bundle。

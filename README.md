@@ -27,7 +27,10 @@
 ./install.sh
 
 # 2) Restart dsh process (lets sandbox patch + latest plugin code take effect)
-#    Stop `pnpm dsh web --port 3081` with Ctrl-C, then restart; session data persists.
+#    Stop `pnpm dsh web --port 3081` with Ctrl-C, then restart with --expose-internals
+#    for config HMR (plugin rows hot-reload on cordis.patch.yml edits):
+#    node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port 3081
+#    Or simply: ./restart.sh  (already includes --expose-internals)
 
 # 3) Refresh browser page
 #    New session: select the "mydsh 模式" preset in the sidebar

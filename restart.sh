@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
-# mydsh：重启 dsh web 进程（让 checkout 补丁与最新插件代码生效）。
-# 用法: ./restart.sh [checkout 路径] [端口]
-# 说明: 会话数据持久化在 $DSH_HOME，重启不会丢任务；浏览器刷新即可重连。
+# mydsh: restart dsh web process (lets sandbox patch + latest plugin code take effect).
+# Usage: ./restart.sh [checkout path] [port]
+# Session data persists in $DSH_HOME; restart does not lose tasks.
+#
+# Important: when called from inside a dsh agent session, killing dsh would
+# also kill this script (child of dsh). setsid detaches this script into a
+# new session so the kill of the old dsh process does not cascade to us.
 set -euo pipefail
+
+# Detach from parent process group: when invoked from a dsh agent bash tool,
+# killing dsh will not cascade to this script.
+if [ -z "$MYDSH_RESTART_DETACHED" ]; then
+  export MYDSH_RESTART_DETACHED=1
+  exec setsid bash "$0" "$@"
+fi
 
 CHECKOUT="${1:-${DSH_CHECKOUT:-$HOME/deepseek-harness}}"
 PORT="${2:-${DSH_WEB_PORT:-3081}}"
@@ -11,11 +22,11 @@ LOG="$LOG_DIR/dsh-restart.log"
 mkdir -p "$LOG_DIR"
 
 if [ ! -f "$CHECKOUT/package.json" ]; then
-  echo "error: 找不到 checkout: $CHECKOUT" >&2
+  echo "error: checkout not found: $CHECKOUT" >&2
   exit 1
 fi
 
-echo "== 停止当前 dsh web (:${PORT}) =="
+echo "== Stopping dsh web (:${PORT}) =="
 PIDS="$(pgrep -f "apps/cli/src/bin.ts web --port $PORT" || true)"
 if [ -n "$PIDS" ]; then
   kill $PIDS || true
@@ -25,25 +36,27 @@ if [ -n "$PIDS" ]; then
   done
   STILL="$(pgrep -f "apps/cli/src/bin.ts web --port $PORT" || true)"
   if [ -n "$STILL" ]; then
-    echo "警告: 进程未退出，强制终止: $STILL"
+    echo "warning: process did not exit, force killing: $STILL"
     kill -9 $STILL || true
     sleep 1
   fi
 else
-  echo "  未发现运行中的 dsh web 进程"
+  echo "  no running dsh web process found"
 fi
 
-echo "== 启动 dsh web (:${PORT}) =="
+echo "== Starting dsh web (:${PORT}) =="
 cd "$CHECKOUT"
-nohup node --import tsx/esm apps/cli/src/bin.ts web --port "$PORT" >>"$LOG" 2>&1 &
-echo "  新进程 PID: $!，日志: $LOG"
+# --expose-internals: enables cordis-plugin-hmr to access Node internal module
+# loader, activating config HMR (cordis.patch.yml edits take effect live).
+nohup node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port "$PORT" >>"$LOG" 2>&1 &
+echo "  new PID: $!, log: $LOG"
 
 for _ in $(seq 1 60); do
   if curl -sf "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
-    echo "== 已就绪：http://127.0.0.1:$PORT =="
+    echo "== Ready: http://127.0.0.1:$PORT =="
     exit 0
   fi
   sleep 1
 done
-echo "警告: 端口 ${PORT} 60 秒内未就绪，请查看日志: $LOG"
+echo "warning: port ${PORT} not ready in 60s, check log: $LOG"
 exit 1

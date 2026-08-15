@@ -1,24 +1,14 @@
-// mydsh ui-video — 浏览器半边：把消息里引用的本地视频/音频渲染成播放器。
-//
-// 手写 __ModuleLoader__ bundle（零构建依赖，纯 DOM，不需要 react）。
-// 机制：
-//   - 在会话内容区挂 MutationObserver：发现指向本地媒体文件的 <a> 链接
-//     （href 以 .mp4/.webm/.mov/.m4v/.mkv/.mp3/.wav/.ogg/.flac/.m4a 结尾，
-//     且不是 http(s) 外链），就把它替换成 <video controls>（音频则 <audio>），
-//     src 指向主机层路由 `/mydsh-media/<encodeURIComponent(绝对路径)>`。
-//   - 约定：模型/用户在消息里用绝对路径写媒体链接，例如
-//     `[demo.mp4](/home/user/videos/demo.mp4)` 或直接 `[demo.mp4](/home/... )`。
-//   - 幂等：已处理过的元素打上标记，不重复替换；新消息到达时自动生效。
 window.__ModuleLoader__.load({
 	id: '@mydsh/ui-video',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
+		const React = require('react');
+		const { useEffect, createElement } = React;
 
 		const MEDIA_RE = /\.(mp4|webm|mov|m4v|mkv|ogv|mp3|wav|ogg|flac|m4a)(\?.*)?$/i;
 		const AUDIO_RE = /\.(mp3|wav|ogg|flac|m4a)(\?.*)?$/i;
 		const PROCESSED = 'data-mydsh-media';
-		let started = false;
 
 		function isExternal(href) {
 			try { return /^https?:/i.test(href) || /^data:/i.test(href) || /^javascript:/i.test(href); } catch { return true; }
@@ -52,33 +42,41 @@ window.__ModuleLoader__.load({
 			}
 		}
 
-		function start() {
-			if (started) return;
-			started = true;
-			const boot = () => {
-				upgrade(document.body);
-				const observer = new MutationObserver(() => { upgrade(document.body); });
-				observer.observe(document.body, { childList: true, subtree: true });
-				window.__mydshVideoObserver = observer;
-			};
-			if (document.body) boot();
-			else document.addEventListener('DOMContentLoaded', boot, { once: true });
+		/** null 组件：useEffect 管理 MutationObserver 生命周期，卸载时自动断开。 */
+		function VideoWatcher() {
+			useEffect(() => {
+				const boot = () => {
+					upgrade(document.body);
+					const observer = new MutationObserver(() => { upgrade(document.body); });
+					observer.observe(document.body, { childList: true, subtree: true });
+					return observer;
+				};
+				let observer = null;
+				if (document.body) observer = boot();
+				else {
+					const handler = () => { observer = boot(); };
+					document.addEventListener('DOMContentLoaded', handler, { once: true });
+					return () => { document.removeEventListener('DOMContentLoaded', handler); if (observer) observer.disconnect(); };
+				}
+				return () => { if (observer) observer.disconnect(); };
+			}, []);
+			return null;
 		}
 
 		module.exports = {
 			name: '@mydsh/ui-video',
-			apply() {
-				// 等 DOM 可用后启动观察器；插件卸载时断开。
-				const startLater = () => {
-					start();
-					return () => {
-						try { if (window.__mydshVideoObserver) window.__mydshVideoObserver.disconnect(); } catch {}
-					};
-				};
-				// apply 里没有 ctx.effect 依赖项；直接启动（观察器断开由本插件生命周期保证）。
-				const dispose = startLater();
-				// 简单起见把 disposer 挂在 window 上；页面刷新即重置。
-				window.__mydshVideoDispose = dispose;
+			inject: ['slots'],
+			apply(ctx) {
+				const slots = ctx.get('slots');
+				if (slots === undefined) return;
+				ctx.effect(
+					() => slots.inject('conversation.input.dock', () => slots.register({
+						name: 'conversation.input.dock',
+						id: 'mydsh-video-watcher',
+						order: 200,
+					}, VideoWatcher)),
+					'@mydsh/ui-video: observer',
+				);
 			},
 		};
 		return module.exports;

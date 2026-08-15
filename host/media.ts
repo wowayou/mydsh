@@ -99,6 +99,23 @@ export function apply(ctx: Context): void {
   const webServer = ctx.get('webServer')
   if (webServer === undefined) return
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
+    // CSRF protection: only accept requests from the dsh web UI (same origin).
+    const origin = req.headers.origin ?? req.headers.referer
+    if (typeof origin === 'string') {
+      try {
+        const u = new URL(origin)
+        // Allow same-origin (any port on 127.0.0.1/localhost); reject cross-origin.
+        if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') {
+          res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
+          res.end('forbidden')
+          return
+        }
+      } catch {
+        res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
+        res.end('forbidden')
+        return
+      }
+    }
     const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
     const filePath = decodePath(pathname)
     if (filePath === undefined) {

@@ -52,6 +52,10 @@
 
 - id: mydsh-vision
   name: './plugins/vision-tool.ts'
+  config:
+    provider: aliyun-bailian-vision
+    model: qwen-vl-max
+    maxChars: 8000
 
 # ── shell ───────────────────────────────────────────────────────────────────
 

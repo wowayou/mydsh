@@ -70,10 +70,10 @@ window.__ModuleLoader__.load({
 		/** 深链打开器：渲染 null，加载时按 URL 选择会话。sessions 服务经 apply 闭包注入。 */
 		function UrlSessionOpener(props) {
 			const useSessions = props.useSessions;
+			const sessions = props.sessions;
 			const target = useMemo(() => {
 				try { return new URLSearchParams(window.location.search).get('session'); } catch { return null; }
 			}, []);
-			const sessions = sessionsService;
 			// 等待列表 ready 且包含目标（phase: 'pending' | 'ready'）。
 			const listed = useSessions((s) => s && s.phase === 'ready' && target !== null && s.ids.indexOf(target) !== -1);
 			const opened = useRef(false);
@@ -85,14 +85,11 @@ window.__ModuleLoader__.load({
 			return null;
 		}
 
-		/** apply 时捕获的 sessions 服务（组件经闭包使用；避免在组件里直接访问 ctx）。 */
-		let sessionsService = undefined;
-
 		module.exports = {
 			name: '@mydsh/ui-session-tabs',
 			inject: ['slots', 'sessions'],
 			apply(ctx) {
-				sessionsService = ctx.get('sessions');
+				const sessions = ctx.get('sessions');
 				const slots = ctx.get('slots');
 				if (slots === undefined) return;
 				ctx.effect(
