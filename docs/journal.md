@@ -167,3 +167,11 @@
 - [D] 决定二次干净重启（恢复部署文件为仓库版 → 重装 → 延迟 20s 受保护重启，条件：旧 PID 494458 仍在）。
   新进程将全新导入含 inject + 修复的 media.ts，路由应正常 200/206。
 - [TODO] 二次重启后验证：media 200/206、sandbox 同模式升级放行、boot 图、notify 持续记录。
+
+## 2026-08-15 社区发布
+
+- [A] 推送到 GitHub 仓库 `wowayou/mydsh`，添加 `dsh-plugin` topic。
+- [A] 新增 `LICENSE`（MIT）；README 补充英文段落（双语，便于社区发现）。
+- [D] 按 CONTRIBUTING.md 指引：DSH 暂不接受外部 PR，社区贡献方式 =
+  创建插件 + 关联 `dsh-plugin` topic。mydsh 作为一个完整个人 Agent 系统
+  （四层架构：补丁 / 主机 / 预设 / 浏览器），作为 dsh-plugin 生态示例发布。

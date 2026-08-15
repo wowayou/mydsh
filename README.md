@@ -1,3 +1,77 @@
+# mydsh — Personal Agent System on DeepSeek Harness
+
+[English](#english) | [中文](#中文)
+
+---
+
+## English
+
+> Everything is a plugin. This project reorganizes DeepSeek Harness capabilities into your own personal Agent system.
+
+### What it does
+
+| Feature | Implementation | Layer |
+| --- | --- | --- |
+| Task completion notification | Host plugin listens to `agent/status` (running→idle): JSONL log + `notify-send`; browser plugin: Notification API + sound (alerts when tab is in background) | Host + Browser |
+| Proactive notification | Model can call `notify_user(title, body)` tool | Preset |
+| Vision for text models | `vision_describe(path, prompt)` — modlens visual assistant: reuses image attachment channel, calls qwen-vl-max to generate descriptions for text models | Preset |
+| Codex-style reply annotations | Each assistant reply gets an "annotate" action: select text → write annotation (localStorage, bucketed by session + message) | Browser |
+| Multi-session tabs | Session header "⧉" button: copies `?session=<id>` deep link and opens in new tab; each tab selects its own session independently | Browser |
+| Video support | Media links with absolute paths (`[demo.mp4](/abs/path/demo.mp4)`) auto-render as draggable `<video>/<audio>` (host `/mydsh-media` route with Range support) | Host + Browser |
+| Non-DeepSeek model full-access error fix | Minimal patch to harness: same-mode "escalation" treated as no-op pass-through (`patches/`, with unit tests) | Patch |
+
+### Quick start
+
+```bash
+# 1) Deploy (idempotent, safe to re-run)
+./install.sh
+
+# 2) Restart dsh process (lets sandbox patch + latest plugin code take effect)
+#    Stop `pnpm dsh web --port 3081` with Ctrl-C, then restart; session data persists.
+
+# 3) Refresh browser page
+#    New session: select the "mydsh 模式" preset in the sidebar
+```
+
+### Install via dsh plugin command (community flow)
+
+```bash
+# Clone and deploy
+git clone https://github.com/wowayou/mydsh.git
+cd mydsh
+./install.sh
+```
+
+### Requirements
+
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) installed and running
+- Node.js with tsx support
+- `$DSH_HOME` set (defaults to `~/.dsh`)
+- Optional: `notify-send` for desktop notifications (Linux/Wayland)
+
+### Architecture
+
+```
+mydsh/
+├── README.md
+├── LICENSE
+├── docs/{design.md, journal.md}   # Architecture blueprint + traceable process log
+├── preset/                        # mydsh agent preset (standard mode, personalized)
+│   ├── agent.cordis.yml           #   Composition (persona + two private tool rows)
+│   └── plugins/{notify-tool,vision-tool}.ts
+├── host/{notify,media}.ts         # Host plugins (notification listener / local media route)
+├── client/                        # Browser plugins (handwritten __ModuleLoader__ bundles, zero build deps)
+│   ├── ui-notify/  ui-annotate/  ui-session-tabs/  ui-video/
+├── patches/                       # Sandbox same-mode escalation patch + replay script
+├── install.sh                     # Idempotent deploy to $DSH_HOME
+├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
+└── manifest.json                  # File → deploy target manifest
+```
+
+---
+
+## 中文
+
 # mydsh — 我的 Agent 系统（构建在 DeepSeek Harness 之上）
 
 > 一切皆插件。这套系统把 DSH 的能力按「插件行」重新组织成你自己的 Agent：
