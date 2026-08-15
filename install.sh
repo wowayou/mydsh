@@ -87,8 +87,6 @@ block = f"""{start}
     # mydsh client: 浏览器插件（包位于 profiles/node_modules/@mydsh）
     - id: mydsh-ui-notify
       name: '@mydsh/ui-notify'
-    - id: mydsh-ui-annotate
-      name: '@mydsh/ui-annotate'
     - id: mydsh-ui-session-tabs
       name: '@mydsh/ui-session-tabs'
     - id: mydsh-ui-video

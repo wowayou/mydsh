@@ -15,8 +15,7 @@
 | Task completion notification | Host plugin listens to `agent/status` (running→idle): JSONL log + `notify-send`; browser plugin: Notification API + sound (alerts when tab is in background) | Host + Browser |
 | Proactive notification | Model can call `notify_user(title, body)` tool | Preset |
 | Vision for text models | `vision_describe(path, prompt)` — modlens visual assistant: reuses image attachment channel, calls qwen-vl-max to generate descriptions for text models | Preset |
-| Codex-style reply annotations | Each assistant reply gets an "annotate" action: select text → write annotation (localStorage, bucketed by session + message) | Browser |
-| Multi-session tabs | "⧉" button in assistant message actions (three-dots menu): copies `?session=<id>` deep link and opens in new tab; each tab selects its own session independently | Browser |
+| Multi-session tabs | "⧉" button in session header actions: copies `?session=<id>` deep link and opens in new tab; each tab selects its own session independently | Browser |
 | Video support | Media links with absolute paths (`[demo.mp4](/abs/path/demo.mp4)`) auto-render as draggable `<video>/<audio>` (host `/mydsh-media` route with Range support) | Host + Browser |
 | Non-DeepSeek model full-access error fix | Minimal patch to harness: same-mode "escalation" treated as no-op pass-through (`patches/`, with unit tests) | Patch |
 
@@ -100,7 +99,7 @@ mydsh/
 │   └── plugins/{notify-tool,vision-tool}.ts
 ├── host/{notify,media}.ts         # Host plugins (notification listener / local media route)
 ├── client/                        # Browser plugins (handwritten __ModuleLoader__ bundles, zero build deps)
-│   ├── ui-notify/  ui-annotate/  ui-session-tabs/  ui-video/
+│   ├── ui-notify/  ui-session-tabs/  ui-video/
 ├── patches/                       # Sandbox + UA override patches + replay script
 ├── restart.sh                     # Restart dsh (setsid + --expose-internals)
 ├── install.sh                     # Idempotent deploy to $DSH_HOME
@@ -126,8 +125,7 @@ mydsh/
 | 任务完成没提醒 | 主机层监听 `agent/status`（running→idle）：写 JSONL 日志 + `notify-send`；浏览器插件：Notification API + 提示音（页面后台时才提醒） | 主机 + 浏览器 |
 | 主动通知 | 模型可调 `notify_user(title, body)` 工具 | 预设 |
 | 文本模型看不懂图片 | `vision_describe(path, prompt)` —— modlens 视觉助手：复用图片提交通道，调 qwen-vl-max 生成描述回给文本模型 | 预设 |
-| Codex 式回复批注 | 每条助手回复的操作条上有「批注」：选中文本 → 写批注（localStorage 持久化，按会话+消息分桶） | 浏览器 |
-| 多 Session 新窗口 | 助手消息操作条（三点菜单）「⧉」按钮：复制 `?session=<id>` 深链并在新标签页打开；各标签页各选各的会话互不干扰 | 浏览器 |
+| 多 Session 新窗口 | 会话头操作行「⧉」按钮：复制 `?session=<id>` 深链并在新标签页打开；各标签页各选各的会话互不干扰 | 浏览器 |
 | 视频支持 | 消息里以绝对路径写的媒体链接（`[demo.mp4](/abs/path/demo.mp4)`）自动渲染成可拖动的 `<video>/<audio>`（主机 `/mydsh-media` 路由带 Range 支持） | 主机 + 浏览器 |
 | 非 DeepSeek 模型 full-access 报错 | 对 harness 的最小补丁：同模式「升级」视为 no-op 直接放行（`patches/`，附单测与重放脚本） | 补丁 |
 
@@ -142,7 +140,7 @@ mydsh/
 │   └── plugins/{notify-tool,vision-tool}.ts
 ├── host/{notify,media}.ts         # 主机层插件（通知监听 / 本地媒体路由）
 ├── client/                        # 浏览器插件（手写 __ModuleLoader__ bundle，零构建依赖）
-│   ├── ui-notify/  ui-annotate/  ui-session-tabs/  ui-video/
+│   ├── ui-notify/  ui-session-tabs/  ui-video/
 ├── patches/                       # sandbox 同模式升级补丁 + 重放脚本
 ├── install.sh                     # 幂等部署到 $DSH_HOME
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
@@ -185,7 +183,7 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
   （需图形会话）。所有事件追加到 `$DSH_HOME/mydsh/notify.jsonl`。
 - **视觉**：直接对模型说「看一下这张图」并给出图片路径；或让模型用 `vision_describe`。
 - **批注**：悬停一条回复 → 点击「✎ 批注」；先选中回复里的文字会被自动摘录进批注。
-- **多标签**：助手消息操作条「⧉」一键新标签页打开本会话；手动访问 `http://127.0.0.1:3081/?session=<id>` 也可直达。
+- **多标签**：会话头「⧉」一键新标签页打开本会话；手动访问 `http://127.0.0.1:3081/?session=<id>` 也可直达。
 - **视频**：让模型在回复里写 `[demo.mp4](/绝对/路径/demo.mp4)` 这种链接，页面自动渲染播放器。
 
 ## 升级与维护

@@ -47,8 +47,7 @@ DSH 的每个能力都是一条 `cordis.yml` 里的插件行。我的系统 = �
 | 自定义提示音 | 客户端 | `@mydsh/ui-notify` | `settings.general.item` 设置卡片：上传音频文件 → localStorage base64，回退 Web Audio beep |
 | 主动通知工具 | 预设 | `preset/plugins/notify-tool.ts` | 模型可调 `notify_user(title, body)` 工具 |
 | 视觉理解（modlens） | 预设 | `preset/plugins/vision-tool.ts` | 工具 `vision_describe(path, prompt)`：attachment 提交图片 → `llm.stream`（qwen-vl-max） |
-| 选中回复加批注 | 客户端 | `@mydsh/ui-annotate` | `conversation.chat.assistant-actions` 槽位 + 文本选区浮动按钮，localStorage 持久化 |
-| 多会话新标签页 | 客户端 | `@mydsh/ui-session-tabs` | `conversation.chat.assistant-actions` 操作条「⧉」按钮 + `conversation.input.dock` URL 打开器 |
+| 多会话新标签页 | 客户端 | `@mydsh/ui-session-tabs` | `conversation.session.header.actions` 会话头「⧉」按钮 + `conversation.input.dock` URL 打开器 |
 | 视频支持 | 客户端 | `@mydsh/ui-video` | `conversation.input.dock` null 组件 + MutationObserver，消息中媒体链接渲染 `<video>` |
 | 非 DeepSeek 模型 full-access 报错 | 部署层补丁 | `patches/sandbox-same-mode-escalation.patch` | 同模式升级视为 no-op 直接放行 |
 | 第三式中转站 403 client_restricted | 部署层补丁 | `patches/user-agent-override.patch` + `patches/per-provider-ua-override.patch` | UA 全局环境变量覆盖 + per-provider headers 优先 |
@@ -108,6 +107,7 @@ root-scope，不依赖会话，刷新不丢失。
 `sessionsService` 变量获取会话服务，违反数据流原则，会话 ID 定位不准。
 
 **最终版**：
+- 「⧉」按钮移回 `conversation.session.header.actions`（会话头操作行 = 会话级「三个点」菜单位置）；
 - 「⧉」按钮移到 `conversation.chat.assistant-actions`（助手消息操作条 = 三点菜单位置）；
 - 用 `sessionId` prop（PropsRuntime 框架标准 kit 直接提供）替代 `sessions` 服务闭包；
 - URL 打开器（null 组件）移到 `conversation.input.dock`，不占视觉空间。
@@ -119,6 +119,13 @@ root-scope，不依赖会话，刷新不丢失。
 
 **解法**：改为 `slots.inject` + React `useEffect` 管理 Observer 生命周期，
 卸载时 `useEffect` cleanup 自动 `observer.disconnect()`。
+
+
+### 4.5 批注功能：暂移除
+
+**决策**：当前批注实现只存 localStorage（不进对话），
+用户选中文本→加批注→继续对话的完整流程未实现。放上去反而误导。
+移除部署，留待 v2 做完整的「选中文本 → 加批注 → followup 对话」。
 
 ## 5. HMR 热重载（踩坑记录）
 

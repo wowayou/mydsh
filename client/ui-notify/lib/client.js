@@ -1,12 +1,8 @@
 // mydsh ui-notify — browser-side task completion notification (Notification API + sound).
 //
 // Two registrations:
-// 1. conversation.input.dock#mydsh-notify — null component, detects running→idle, fires notification.
-//    Uses useSession + interval poll to work even when the tab is hidden (React defers
-//    re-renders in hidden tabs; the poll bypasses that).
-// 2. settings.general.item#mydsh-notify-sound — a settings card in Settings → General where
-//    users pick a custom notification sound file (.mp3/.wav/.ogg/.m4a), test it, or reset
-//    to the default Web Audio beep. Stored in localStorage (base64 data URL).
+// 1. conversation.input.dock#mydsh-notify — null component, detects running→idle.
+// 2. settings.general.item#mydsh-notify-sound — settings row matching DSH design language.
 //
 // Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
 window.__ModuleLoader__.load({
@@ -24,11 +20,13 @@ window.__ModuleLoader__.load({
 		}
 		var T = isZh()
 			? { title: '任务完成', body: '会话已完成',
-			    label: '完成提醒声音', upload: '选择音频文件', test: '试听', remove: '恢复默认',
-			    custom: '自定义音频', default: '默认提示音', none: '未设置' }
+			    soundLabel: '完成提示音', test: '试听',
+			    custom: '自定义音频', default: '默认提示音',
+			    upload: '选择文件', remove: '恢复默认' }
 			: { title: 'Task done', body: 'The session has finished',
-			    label: 'Completion sound', upload: 'Choose audio file', test: 'Test', remove: 'Reset',
-			    custom: 'Custom audio', default: 'Default beep', none: 'Not set' };
+			    soundLabel: 'Notification sound', test: 'Test',
+			    custom: 'Custom audio', default: 'Default beep',
+			    upload: 'Choose file', remove: 'Reset' };
 
 		function loadCustomSound() {
 			try { return localStorage.getItem(SOUND_KEY); } catch { return null; }
@@ -115,7 +113,11 @@ window.__ModuleLoader__.load({
 			return null;
 		}
 
-		// --- Settings card: sound configuration ---
+		// --- Settings row: matches DSH General section row pattern ---
+		// Visual language from LanguageRow.tsx / AppearanceRow.tsx:
+		//   .row: flex, align-center, gap 8px, padding 16px 0, border-bottom hairline
+		//   .title: 14px, weight 400, line-height 22px, color label-primary
+		//   .selector: h36, r18, bg-module-platform, pad 0/14, font inherit
 		function SoundSettings() {
 			var fileRef = useRef(null);
 			var state = useState(loadCustomSound());
@@ -140,29 +142,45 @@ window.__ModuleLoader__.load({
 			var onTest = useCallback(function() { playSound(); }, []);
 
 			var rowStyle = {
-				display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+				display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0',
+				borderBottom: '1px solid var(--dsw-alias-border-l2, #3a4152)',
 			};
-			var labelStyle = {
-				fontSize: 13, fontWeight: 500,
-				color: 'var(--dsw-alias-label-primary, #e6e9ef)', minWidth: 80,
+			var textSectionStyle = {
+				flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '4px',
 			};
-			var btnBase = {
-				cursor: 'pointer', fontSize: 12, borderRadius: 6, padding: '4px 10px',
-				border: '1px solid var(--dsw-alias-border-l2, #3a4152)',
-				background: 'var(--dsw-alias-bg-layer-2, #171a21)',
-				color: 'var(--dsw-alias-label-secondary, #9aa3b2)',
+			var titleStyle = {
+				fontSize: '14px', fontWeight: 400, lineHeight: '22px',
+				color: 'var(--dsw-alias-label-primary, #e6e9ef)',
 			};
-			var statusStyle = {
-				fontSize: 12, color: hasCustom
-					? 'var(--dsw-alias-state-success-primary, #3fae6a)'
-					: 'var(--dsw-alias-label-tertiary, #6b7280)',
+			var subtitleStyle = {
+				fontSize: '12px', lineHeight: '18px',
+				color: hasCustom ? 'var(--dsw-alias-state-success-primary, #3fae6a)' : 'var(--dsw-alias-label-tertiary, #6b7280)',
+			};
+			// Selector pill (matches LanguageRow .selector: h36, r18, bg-module-platform)
+			var pillStyle = {
+				display: 'inline-flex', alignItems: 'center', gap: '6px',
+				height: '36px', padding: '0 14px', border: 'none', borderRadius: '18px',
+				background: 'var(--dsw-alias-bg-module-platform, #f5f6f7)',
+				font: 'inherit', fontSize: '14px', lineHeight: '22px',
+				color: 'var(--dsw-alias-label-primary, #e6e9ef)', cursor: 'pointer',
+				flexShrink: 0,
+			};
+			var ghostBtnStyle = {
+				display: 'inline-flex', alignItems: 'center',
+				height: '36px', padding: '0 12px', border: 'none', borderRadius: '18px',
+				background: 'transparent', font: 'inherit', fontSize: '13px',
+				color: 'var(--dsw-alias-label-tertiary, #6b7280)', cursor: 'pointer',
+				flexShrink: 0,
 			};
 
 			return createElement('div', { style: rowStyle },
-				createElement('span', { style: labelStyle }, T.label),
-				createElement('span', { style: statusStyle }, hasCustom ? T.custom : T.default),
+				createElement('div', { style: textSectionStyle },
+					createElement('div', { style: titleStyle }, T.soundLabel),
+					createElement('div', { style: subtitleStyle }, hasCustom ? T.custom : T.default),
+				),
+				// Upload button (styled as selector pill)
 				createElement('label', {
-					style: { ...btnBase, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' },
+					style: Object.assign({}, pillStyle, { cursor: 'pointer' }),
 				}, T.upload,
 					createElement('input', {
 						ref: fileRef, type: 'file',
@@ -171,9 +189,13 @@ window.__ModuleLoader__.load({
 						onChange: onFile,
 					}),
 				),
-				createElement('button', { style: btnBase, onClick: onTest }, T.test),
+				// Test button (ghost style)
+				createElement('button', {
+					style: ghostBtnStyle, onClick: onTest,
+				}, T.test),
+				// Reset button (only when custom is set)
 				hasCustom ? createElement('button', {
-					style: { ...btnBase, color: 'var(--dsw-alias-state-warn-primary, #e0a03c)' },
+					style: Object.assign({}, ghostBtnStyle, { color: 'var(--dsw-alias-state-warn-primary, #e0a03c)' }),
 					onClick: onRemove,
 				}, T.remove) : null,
 			);
@@ -185,7 +207,6 @@ window.__ModuleLoader__.load({
 			apply(ctx) {
 				var slots = ctx.get('slots');
 				if (slots === undefined) return;
-				// 1. Detection watcher (null component in input dock).
 				ctx.effect(
 					() => slots.inject('conversation.input.dock', () => slots.register({
 						name: 'conversation.input.dock',
@@ -194,7 +215,6 @@ window.__ModuleLoader__.load({
 					}, NotifyWatcher)),
 					'@mydsh/ui-notify: dock watcher',
 				);
-				// 2. Sound settings card in Settings → General.
 				ctx.effect(
 					() => slots.inject('settings.general.item', () => slots.register({
 						name: 'settings.general.item',
