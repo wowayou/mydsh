@@ -225,3 +225,29 @@
   不影响其他 provider，无需重启（profile 热重载）。
 - [D] 优先级：per-provider headers > 全局 DSH_APP_PRODUCT 环境变量 > 默认 deepseek-harness。
 - [V] attribution.spec.ts 6/6 通过；smoke 23/23 通过。
+
+## 2026-08-15 项目收敛与口径对齐
+
+- [A] **ui-session-tabs 移回会话头**：从 conversation.chat.assistant-actions
+  移回 conversation.session.header.actions（会话级「三个点」菜单位置）。
+  「打开新标签页」是会话级操作，不应放在消息级操作条。
+- [D] **ui-annotate 移除**：当前实现只存 localStorage 不进对话历史，
+  不完整的功能比没有更糟糕。留待 v2 做完整的选中文本到批注到followup对话。
+  从 install.sh patch 行、manifest.json、smoke 测试中移除；
+  清理了已部署的 @mydsh/ui-annotate 包目录。
+- [A] **ui-notify 设置卡片样式修正**：匹配 DSH settings row 设计语言
+  （LanguageRow / AppearanceRow 模式：flex row, 16px padding, hairline border,
+  14px title, selector pill h36/r18/bg-module-platform）。
+- [A] **POSTMORTEM.md**：记录核心原则、踩坑、13 条建议采纳状态、架构决策、
+  给未来开发者的 7 条建议。
+- [V] **最终验证**：
+  - smoke 23/23 通过（ui-annotate 已移除，ui-session-tabs 回到 header actions）；
+  - preset check 31/31 通过；
+  - 3 个 checkout 补丁全部已应用（sandbox/UA env/per-provider UA）；
+  - 部署状态：3 个客户端插件（ui-notify/ui-session-tabs/ui-video）+ 2 个主机插件
+    （notify/media）+ 1 个预设（mydsh 模式）；
+  - boot graph 干净（无 ui-annotate）；
+  - patch file 干净（无 mydsh-ui-annotate 行）；
+  - 幂等性：install.sh 连续两次零漂移。
+- [D] **当前项目状态**：v0.1 收敛完成，可作为 dsh-plugin 生态示例使用。
+  待办项（v2）：通知去重/合并、多图视觉、勿扰/摘要、健康检查、批注进对话。
