@@ -1,0 +1,18 @@
+{
+  "name": "@mydsh/ui-video",
+  "version": "0.1.0",
+  "description": "mydsh: render local video/audio files referenced in messages as playable <video>/<audio> via the /mydsh-media host route",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

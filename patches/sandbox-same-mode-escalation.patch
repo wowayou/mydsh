@@ -1,0 +1,68 @@
+diff --git a/packages/sandbox/sandbox/src/escalation.ts b/packages/sandbox/sandbox/src/escalation.ts
+index e0b9a2ce63..09ada4a10b 100644
+--- a/packages/sandbox/sandbox/src/escalation.ts
++++ b/packages/sandbox/sandbox/src/escalation.ts
+@@ -141,8 +141,9 @@ export interface EscalationRequest {
+ }
+ 
+ /**
+- * Resolve a sandbox-escalation request BEFORE anything executes: check strict
+- * widening against the call's effective mode, then resolve the approval
++ * Resolve a sandbox-escalation request BEFORE anything executes: a same-mode
++ * request is a no-op grant (the call already runs at that mode), then check
++ * strict widening against the call's effective mode, then resolve the approval
+  * channel, then map every outcome — the ordered fail-closed sequence both
+  * enforcing families share. Returns the granted mode to stamp onto exactly
+  * this call; throws the distinct verbatim text for every other path (a
+@@ -156,9 +157,17 @@ export interface EscalationRequest {
+  */
+ export async function approveEscalation<A, C>(request: EscalationRequest, approval: EscalationApproval<A, C>): Promise<SandboxMode> {
+   const { requestedMode: mode, effectiveMode, justification, subject } = request
++  // Same-mode request: the call already runs at exactly that mode, so
++  // "escalating" is a no-op — grant without asking. This is the case a model
++  // lands on when it follows the escalation hint while the session is already
++  // full-access (common with non-DeepSeek models in `standard` mode); failing
++  // it closed produced a confusing error for an action that widens nothing.
++  // It never widens beyond the effective mode, so no approval is owed.
++  if (mode === effectiveMode) return effectiveMode
+   // Strict widening is an EXECUTION check against the call's effective mode —
+   // deliberately not a schema constraint (the enum is the closed target
+-  // vocabulary; the effective mode is per-call truth).
++  // vocabulary; the effective mode is per-call truth). A strictly NARROWER
++  // request still fails closed: it never widens anything and is a model bug.
+   if (!(WIDER_MODES[effectiveMode] ?? []).includes(mode as SandboxMode)) {
+     throw new Error(`sandbox escalation to "${mode}" is not strictly wider than this call's current "${effectiveMode}" mode`)
+   }
+diff --git a/packages/sandbox/sandbox/tests/escalation.spec.ts b/packages/sandbox/sandbox/tests/escalation.spec.ts
+index 15810d09d5..e2294c500c 100644
+--- a/packages/sandbox/sandbox/tests/escalation.spec.ts
++++ b/packages/sandbox/sandbox/tests/escalation.spec.ts
+@@ -81,12 +81,24 @@ describe('approveEscalation', () => {
+     expect(seen[0]?.reason).toBe('escalate sandbox to workspace-write: the user asked to write in the workspace')
+   })
+ 
+-  it('a non-widening request fails closed with its own text and never asks', async () => {
++  it('a same-mode request is a no-op grant: returns the mode and never asks', async () => {
++    for (const mode of ['read-only', 'workspace-write', 'danger-full-access'] as const) {
++      const seen: unknown[] = []
++      const granted = await approveEscalation(
++        req({ requestedMode: mode, effectiveMode: mode }),
++        ingredients({ approver: approver('allowed-once', r => seen.push(r)) }),
++      )
++      expect(granted).toBe(mode)
++      expect(seen).toEqual([])
++    }
++  })
++
++  it('a strictly-narrower request still fails closed with its own text and never asks', async () => {
+     const seen: unknown[] = []
+     const spy = ingredients({ approver: approver('allowed-once', r => seen.push(r)) })
+-    await expect(approveEscalation(req({ requestedMode: 'read-only' }), spy))
+-      .rejects.toThrow(/not strictly wider than this call's current "read-only" mode/)
+-    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as never }), spy))
++    await expect(approveEscalation(req({ requestedMode: 'read-only', effectiveMode: 'workspace-write' as const }), spy))
++      .rejects.toThrow(/not strictly wider than this call's current "workspace-write" mode/)
++    await expect(approveEscalation(req({ requestedMode: 'workspace-write', effectiveMode: 'danger-full-access' as const }), spy))
+       .rejects.toThrow(/not strictly wider/)
+     expect(seen).toEqual([])
+   })

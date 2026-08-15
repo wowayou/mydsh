@@ -1,0 +1,18 @@
+{
+  "name": "@mydsh/ui-notify",
+  "version": "0.1.0",
+  "description": "mydsh: browser completion notification — Notification API + sound when an agent turn finishes while the tab is hidden",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

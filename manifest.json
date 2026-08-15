@@ -1,0 +1,27 @@
+{
+  "name": "mydsh",
+  "description": "用户自己的 Agent 系统（构建在 DeepSeek Harness 之上，一切皆插件）",
+  "version": "0.1.0",
+  "author": "forbackup",
+  "install": {
+    "script": "install.sh",
+    "targets": [
+      { "from": "preset/", "to": "$DSH_HOME/.agent-presets/mydsh/", "kind": "agent-preset", "note": "mydsh agent 预设（标准模式的私人定制版）" },
+      { "from": "host/notify.ts", "to": "$DSH_HOME/profiles/web/plugins/notify.ts", "kind": "host-plugin", "note": "任务完成通知监听（agent/status → JSONL + notify-send）" },
+      { "from": "host/media.ts", "to": "$DSH_HOME/profiles/web/plugins/media.ts", "kind": "host-plugin", "note": "/mydsh-media 本地媒体路由（视频播放用，带 Range）" },
+      { "from": "client/ui-notify/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-notify/", "kind": "client-plugin", "note": "浏览器完成通知（Notification API + 提示音）" },
+      { "from": "client/ui-annotate/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-annotate/", "kind": "client-plugin", "note": "Codex 式回复批注（localStorage）" },
+      { "from": "client/ui-session-tabs/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-session-tabs/", "kind": "client-plugin", "note": "多会话新标签页（?session= 深链）" },
+      { "from": "client/ui-video/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-video/", "kind": "client-plugin", "note": "消息内本地视频/音频播放" },
+      { "from": "patches/sandbox-same-mode-escalation.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "sandbox 同模式升级 no-op（修复非 DeepSeek 模型 full-access 报错）" }
+    ],
+    "patchRows": {
+      "file": "$DSH_HOME/profiles/web/cordis.patch.yml",
+      "ids": ["mydsh-notify", "mydsh-media", "mydsh-ui-notify", "mydsh-ui-annotate", "mydsh-ui-session-tabs", "mydsh-ui-video"]
+    }
+  },
+  "docs": {
+    "design": "docs/design.md",
+    "journal": "docs/journal.md"
+  }
+}

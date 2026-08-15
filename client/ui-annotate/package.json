@@ -1,0 +1,18 @@
+{
+  "name": "@mydsh/ui-annotate",
+  "version": "0.1.0",
+  "description": "mydsh: codex-like annotations on assistant replies — select text in a reply, attach a note; stored per message in localStorage",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}

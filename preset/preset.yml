@@ -1,0 +1,2 @@
+name: mydsh 模式
+description: 标准编码 Agent 的私人定制版：全部标准能力 + 桌面通知（notify_user）+ modlens 视觉助手（vision_describe）。
