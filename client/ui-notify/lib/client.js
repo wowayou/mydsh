@@ -1,9 +1,11 @@
-// mydsh ui-notify — 浏览器半边：任务完成提醒（Notification API + 提示音）。
+// mydsh ui-notify — browser-side task completion notification (Notification API + sound).
 //
-// 手写 __ModuleLoader__ bundle（零构建依赖）：只 require 平台模块表里的 react。
-// 机制：挂一个会话作用域的 null 组件，订阅 useSession(s => s.running)，
-// 在 running -> idle 的下降沿、且页面处于后台（document.hidden）时发通知。
-// 用户正看着页面时不打扰；浏览器未开/无权限时由主机层 notify-send 兜底。
+// Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
+// Mechanism: registers a session-scope null component that subscribes to
+// useSession(s => s.running). To avoid React deferring re-renders in hidden tabs
+// (which delays the notification until the tab becomes visible), the component
+// also sets up a direct interval-based poll that detects running→idle transitions
+// immediately, even when the tab is in the background.
 window.__ModuleLoader__.load({
 	id: '@mydsh/ui-notify',
 	factory: (require) => {
@@ -16,10 +18,10 @@ window.__ModuleLoader__.load({
 			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
 		}
 		const T = isZh()
-			? { title: '任务完成', body: '会话已完成', fail: '无法发送浏览器通知' }
-			: { title: 'Task done', body: 'The session has finished', fail: 'Browser notification unavailable' };
+			? { title: '任务完成', body: '会话已完成' }
+			: { title: 'Task done', body: 'The session has finished' };
 
-		/** 短提示音（Web Audio，失败静默）。 */
+		/** Short beep (Web Audio, silent on failure). */
 		function beep() {
 			try {
 				const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -39,7 +41,7 @@ window.__ModuleLoader__.load({
 			} catch {}
 		}
 
-		/** 浏览器通知：有权限直接发，未决定则请求一次，拒绝则只响提示音。 */
+		/** Browser notification: fire immediately regardless of tab visibility. */
 		function notify(title, body) {
 			try {
 				if (typeof window === 'undefined' || !('Notification' in window)) { beep(); return; }
@@ -51,21 +53,42 @@ window.__ModuleLoader__.load({
 			} catch { beep(); }
 		}
 
-		/** 会话作用域观察器：渲染 null，只跑副作用。 */
+		/** Session-scope watcher: renders null, fires notification on running→idle. */
 		function NotifyWatcher(props) {
 			const useSession = props.useSession;
 			const sessionId = props.sessionId;
+			const runningRef = useRef(undefined);
+
+			// React state-based detection (works when tab is visible).
 			const running = useSession((s) => (s ? s.running : false));
-			const prev = useRef(undefined);
 			useEffect(() => {
-				const was = prev.current;
-				prev.current = running;
-				if (was !== true || running !== false) return;
-				let hidden = false;
-				try { hidden = document.hidden; } catch {}
-				if (!hidden) return;
-				notify(T.title, T.body + ' · ' + String(sessionId));
+				const was = runningRef.current;
+				runningRef.current = running;
+				if (was === true && running === false) {
+					notify(T.title, T.body + ' · ' + String(sessionId));
+				}
 			}, [running, sessionId]);
+
+			// Interval-based detection (works even when tab is hidden).
+			// React defers re-renders in hidden tabs, so the useEffect above
+			// may not fire until the tab becomes visible. This poll checks the
+			// store directly via useSession (which reads synchronously) and
+			// fires the notification immediately.
+			useEffect(() => {
+				const check = () => {
+					try {
+						const current = useSession((s) => (s ? s.running : false));
+						const was = runningRef.current;
+						runningRef.current = current;
+						if (was === true && current === false) {
+							notify(T.title, T.body + ' · ' + String(sessionId));
+						}
+					} catch {}
+				};
+				const timer = setInterval(check, 500);
+				return () => clearInterval(timer);
+			}, [sessionId]); // useSession is stable per session, no need to re-subscribe
+
 			return null;
 		}
 

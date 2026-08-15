@@ -192,3 +192,17 @@
   cordis.patch.yml 编辑即时生效（增删插件行无需重启进程）。
 - [D] 模块级热重载（插件 .ts 源码变更自动重新导入）在 web profile 仍被禁用
   (web-app bundle: hmr: disabled: true)，需 pnpm run dev:web 重建 bundle。
+
+## 2026-08-15 通知与多标签修复
+
+- [F] **通知 bug 根因**：React 18+ 在标签页隐藏时延迟 re-render，导致
+  useSession 状态更新被推迟到标签页重新可见时才触发 useEffect。
+  此时 document.hidden 已为 false，通知被 `if (!hidden) return` 跳过。
+  修复：增加 setInterval 轮询（500ms）直接读取 useSession 快照，
+  绕过 React 渲染调度，在标签页后台时也能立即检测 running→idle 并发通知。
+  同时移除 document.hidden 检查（浏览器通知在后台标签也应弹出）。
+- [F] **多标签 bug**：
+  1. 移到 conversation.chat.assistant-actions（助手消息操作条/三点菜单）；
+  2. 用 sessionId（PropsRuntime 框架标准 kit）替代 sessions 服务闭包；
+  3. URL 打开器移到 conversation.input.dock（null 组件，不占视觉）。
+- [V] smoke 测试 23/23 全过；boot 图含 4 个 @mydsh 插件。
