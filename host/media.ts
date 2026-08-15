@@ -17,6 +17,9 @@ import { extname } from 'node:path'
 
 export const name = 'mydsh-media'
 
+/** 硬依赖 webServer：apply 必须等服务就绪（启动时序里 patch 行可能先于 webserver 激活）。 */
+export const inject = ['webServer']
+
 const PREFIX = '/mydsh-media'
 
 const CONTENT_TYPES: Record<string, string> = {

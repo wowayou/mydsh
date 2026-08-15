@@ -83,6 +83,7 @@ block = f"""{start}
       name: './plugins/notify.ts'
     - id: mydsh-media
       name: './plugins/media.ts'
+      inject: [webServer]
     # mydsh client: 浏览器插件（包位于 profiles/node_modules/@mydsh）
     - id: mydsh-ui-notify
       name: '@mydsh/ui-notify'

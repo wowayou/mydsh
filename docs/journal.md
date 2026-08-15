@@ -147,3 +147,23 @@
   (3) 同模式 `sandbox_permissions: danger-full-access` 在审批 "never" 下直接放行
       （补丁上线，不再报 "not strictly wider"）；
   (4) boot 图仍含 4 个 @mydsh 客户端插件。
+
+## 2026-08-15 目标回合 3 — 重启成功 + 发现 media 时序问题 + 二次重启
+
+- [V] **重启成功**：新 PID 494458（17:35:48 启动），restart.sh 全流程日志正常。
+  sandbox 补丁与（当时部署的）media 修复随新进程上线。
+- [V] **通知链路完全闭环**（新模块）：`notify.jsonl` 出现
+  `plugin-started` 心跳（09:35:39）+ 多会话 `agent-status`（prev/status）记录 +
+  两例 `agent-idle`（ecbfcf72、aad3f8e5）——心跳/状态日志/idle 判定全部工作。
+  另发现用户其它标签页会话（e079d133/ecbfcf72/f7c83ebd）也在被监控（跨会话正确）。
+- [F] **media 路由时序问题**：新进程启动时 profile patch 行可能先于 webserver 服务激活，
+  `ctx.get('webServer')` 为 undefined → apply 提前返回 → 路由未注册（返回 SPA 兜底 200）。
+  修复：
+  1. `host/media.ts` 加模块级 `export const inject = ['webServer']`（规范做法）；
+  2. `install.sh` patch 块给 media 行加 `inject: [webServer]`（行级注入，HMR 可热生效）。
+- [V] 修复后 HMR 重放：路由注册成功（404 文本来自本 handler，不再 SPA 兜底）；
+  但 live 请求仍 404 真实文件 —— 直接驱动部署模块返回 200（video/mp4 + 正确字节），
+  确认 handler 逻辑无误；判定为运行中进程模块缓存 + HMR 重放的状态不一致。
+- [D] 决定二次干净重启（恢复部署文件为仓库版 → 重装 → 延迟 20s 受保护重启，条件：旧 PID 494458 仍在）。
+  新进程将全新导入含 inject + 修复的 media.ts，路由应正常 200/206。
+- [TODO] 二次重启后验证：media 200/206、sandbox 同模式升级放行、boot 图、notify 持续记录。
