@@ -1,7 +1,8 @@
 # mydsh — 我的 Agent 系统设计
 
 > 一句话：在 DeepSeek Harness（DSH）之上，用「一切皆插件」的方式搭建自己的 Agent 系统。
-> 本文件是静态架构蓝图；动态过程记录见 [`journal.md`](journal.md)。
+> 本文件是静态架构蓝图；动态过程记录见 [`journal.md`](journal.md)；
+> 经验教训与决策记录见 [`POSTMORTEM.md`](POSTMORTEM.md)。
 
 ## 0. 背景与约束
 
