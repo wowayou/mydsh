@@ -216,3 +216,12 @@
 - [V] attribution.spec.ts 6/6 通过；escalation.spec.ts 12/12 通过；smoke 23/23 通过。
 - [D] **安全声明**：UA 覆盖仅改变 User-Agent 头中的产品名，不伪造版本号或 URL。
   用户应遵守中转服务商的规则；建议优先使用官方 API 或服务商明确支持的渠道。
+
+## 2026-08-15 Per-provider UA 覆盖补丁
+
+- [A] **Per-provider UA**：patch pi-ai adapter 的 requestHeaders()，
+  让 provider profile 的 headers.user-agent 优先于全局 attribution。
+  用户可在 Settings > Models > provider > headers 里设置 per-provider UA，
+  不影响其他 provider，无需重启（profile 热重载）。
+- [D] 优先级：per-provider headers > 全局 DSH_APP_PRODUCT 环境变量 > 默认 deepseek-harness。
+- [V] attribution.spec.ts 6/6 通过；smoke 23/23 通过。

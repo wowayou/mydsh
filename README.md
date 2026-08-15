@@ -64,6 +64,22 @@ DSH_APP_PRODUCT=my-app ./restart.sh
 
 > **Note**: The version and URL stay from the harness package.json. Only the product name changes.
 > This patch is applied to the checkout alongside the sandbox patch via `./install.sh`.
+#### Per-provider UA override
+
+For relay-specific UA without affecting other providers, set `headers.user-agent` in the provider profile:
+
+```yaml
+# In settings: providers config
+providers:
+  my-relay:
+    baseURL: https://relay.example.com/v1
+    apiKeyEnv: RELAY_KEY
+    headers:
+      user-agent: cursor/0.1.0   # per-provider UA override
+```
+
+Per-provider UA takes priority over the global `DSH_APP_PRODUCT` env var.
+
 ### Requirements
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) installed and running

@@ -1,0 +1,33 @@
+diff --git a/packages/llm/llm-pi-ai/src/adapter.ts b/packages/llm/llm-pi-ai/src/adapter.ts
+index 66964c5339..f79a0be9fd 100644
+--- a/packages/llm/llm-pi-ai/src/adapter.ts
++++ b/packages/llm/llm-pi-ai/src/adapter.ts
+@@ -168,12 +168,26 @@ function reasoningInfo(
+   }
+ }
+ 
+-/** Merge deployment headers while removing case-insensitive attribution collisions. */
++/**
++ * Merge deployment headers with attribution. A per-provider 'user-agent' in
++ * profile.headers takes priority over the global attribution — this enables
++ * per-provider UA override for third-party relay compatibility without a
++ * global env var. Other attribution reserved names (if any are added) still
++ * win collisions.
++ */
+ function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+   const attribution = attributionHeaders()
++  const userEntries = Object.entries(headers ?? {})
++  // Check if the provider profile sets its own 'user-agent' (case-insensitive).
++  const hasUserUA = userEntries.some(([name]) => name.toLowerCase() === 'user-agent')
++  if (hasUserUA) {
++    // Per-provider UA wins: keep all user headers as-is (UA included).
++    return Object.fromEntries(userEntries)
++  }
++  // No per-provider UA: strip reserved names, then add attribution.
+   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
+   return {
+-    ...Object.fromEntries(Object.entries(headers ?? {}).filter(([name]) => !reserved.has(name.toLowerCase()))),
++    ...Object.fromEntries(userEntries.filter(([name]) => !reserved.has(name.toLowerCase()))),
+     ...attribution,
+   }
+ }

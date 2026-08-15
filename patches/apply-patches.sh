@@ -27,22 +27,36 @@ else
   echo "  Applied."
 fi
 
-# --- Patch 2: User-Agent override via env vars ---
+# --- Patch 2: global User-Agent override via env vars ---
 UA_MARKER="DSH_APP_PRODUCT"
 UA_TARGET="$CHECKOUT/packages/llm/llm/src/attribution.ts"
 
 if [ -f "$UA_TARGET" ] && grep -qF "$UA_MARKER" "$UA_TARGET"; then
-  echo "Patch 2 (UA override): already applied, skipping."
+  echo "Patch 2 (UA env override): already applied, skipping."
 else
-  echo "Patch 2 (UA override): applying..."
+  echo "Patch 2 (UA env override): applying..."
   git apply --check "$SCRIPT_DIR/user-agent-override.patch" 2>/dev/null
   git apply "$SCRIPT_DIR/user-agent-override.patch"
   echo "  Applied."
 fi
 
+# --- Patch 3: per-provider UA override (profile.headers wins) ---
+PERPROVIDER_MARKER="per-provider .user-agent"
+PERPROVIDER_TARGET="$CHECKOUT/packages/llm/llm-pi-ai/src/adapter.ts"
+
+if [ -f "$PERPROVIDER_TARGET" ] && grep -qF "$PERPROVIDER_MARKER" "$PERPROVIDER_TARGET"; then
+  echo "Patch 3 (per-provider UA): already applied, skipping."
+else
+  echo "Patch 3 (per-provider UA): applying..."
+  git apply --check "$SCRIPT_DIR/per-provider-ua-override.patch" 2>/dev/null
+  git apply "$SCRIPT_DIR/per-provider-ua-override.patch"
+  echo "  Applied."
+fi
+
 echo ""
-echo "All patches applied. Restart dsh to take effect (tsx reads source directly)."
-echo "Verify: cd $CHECKOUT && pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts"
+echo "All patches applied. Restart dsh to take effect."
 echo ""
-echo "UA override: set DSH_APP_PRODUCT=cursor to send User-Agent: cursor/<version>"
-echo "  Preset aliases: cursor, claude-code, codex, opencode (see restart.sh)"
+echo "UA configuration:"
+echo "  Global:   DSH_UA_ALIAS=cursor ./restart.sh"
+echo "  Per-provider: set headers.user-agent in provider profile config"
+echo "  (Settings > Models > provider > headers: { user-agent: cursor/0.1.0 })"
