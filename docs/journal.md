@@ -206,3 +206,13 @@
   2. 用 sessionId（PropsRuntime 框架标准 kit）替代 sessions 服务闭包；
   3. URL 打开器移到 conversation.input.dock（null 组件，不占视觉）。
 - [V] smoke 测试 23/23 全过；boot 图含 4 个 @mydsh 插件。
+
+## 2026-08-15 User-Agent 覆盖补丁 + 性能/安全优化
+
+- [A] **UA 覆盖补丁**：patch attribution.ts，让 APP_IDENTITY 从环境变量读取：
+  DSH_APP_PRODUCT（产品名）和 DSH_APP_URL（URL），默认值不变。
+  restart.sh 支持 DSH_UA_ALIAS 快捷别名（cursor/claude-code/codex/opencode）。
+  用于绕过第三方中转站对 deepseek-harness 客户端的白名单限制。
+- [V] attribution.spec.ts 6/6 通过；escalation.spec.ts 12/12 通过；smoke 23/23 通过。
+- [D] **安全声明**：UA 覆盖仅改变 User-Agent 头中的产品名，不伪造版本号或 URL。
+  用户应遵守中转服务商的规则；建议优先使用官方 API 或服务商明确支持的渠道。

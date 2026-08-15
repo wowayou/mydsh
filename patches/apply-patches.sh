@@ -1,29 +1,48 @@
 #!/usr/bin/env bash
-# 把 mydsh 对 deepseek-harness 的最小补丁应用到 checkout（幂等）。
-# 用法: patches/apply-patches.sh [checkout 路径]
-# 默认 checkout 路径: 环境变量 DSH_CHECKOUT，否则取 $HOME/deepseek-harness。
+# Apply mydsh patches to the deepseek-harness checkout (idempotent).
+# Usage: patches/apply-patches.sh [checkout path]
+# Default checkout: $DSH_CHECKOUT or $HOME/deepseek-harness
 set -euo pipefail
 
 CHECKOUT="${1:-${DSH_CHECKOUT:-$HOME/deepseek-harness}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ ! -f "$CHECKOUT/package.json" ]; then
-  echo "error: 找不到 deepseek-harness checkout: $CHECKOUT" >&2
+  echo "error: deepseek-harness checkout not found: $CHECKOUT" >&2
   exit 1
 fi
 
-# 已应用的标志：escalation.ts 里的同模式 no-op 注释。
-MARKER="Same-mode request: the call already runs at exactly that mode"
-TARGET="$CHECKOUT/packages/sandbox/sandbox/src/escalation.ts"
+cd "$CHECKOUT"
 
-if [ -f "$TARGET" ] && grep -qF "$MARKER" "$TARGET"; then
-  echo "补丁已应用（$TARGET），跳过。"
-  exit 0
+# --- Patch 1: sandbox same-mode escalation no-op ---
+ESCALATION_MARKER="Same-mode request: the call already runs at exactly that mode"
+ESCALATION_TARGET="$CHECKOUT/packages/sandbox/sandbox/src/escalation.ts"
+
+if [ -f "$ESCALATION_TARGET" ] && grep -qF "$ESCALATION_MARKER" "$ESCALATION_TARGET"; then
+  echo "Patch 1 (sandbox escalation): already applied, skipping."
+else
+  echo "Patch 1 (sandbox escalation): applying..."
+  git apply --check "$SCRIPT_DIR/sandbox-same-mode-escalation.patch" 2>/dev/null
+  git apply "$SCRIPT_DIR/sandbox-same-mode-escalation.patch"
+  echo "  Applied."
 fi
 
-echo "应用补丁: sandbox-same-mode-escalation.patch → $CHECKOUT"
-cd "$CHECKOUT"
-git apply --check "$SCRIPT_DIR/sandbox-same-mode-escalation.patch"
-git apply "$SCRIPT_DIR/sandbox-same-mode-escalation.patch"
-echo "已应用。重启 dsh 进程后生效（dev 态 tsx 直接读源码）。"
-echo "验证: cd $CHECKOUT && pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts"
+# --- Patch 2: User-Agent override via env vars ---
+UA_MARKER="DSH_APP_PRODUCT"
+UA_TARGET="$CHECKOUT/packages/llm/llm/src/attribution.ts"
+
+if [ -f "$UA_TARGET" ] && grep -qF "$UA_MARKER" "$UA_TARGET"; then
+  echo "Patch 2 (UA override): already applied, skipping."
+else
+  echo "Patch 2 (UA override): applying..."
+  git apply --check "$SCRIPT_DIR/user-agent-override.patch" 2>/dev/null
+  git apply "$SCRIPT_DIR/user-agent-override.patch"
+  echo "  Applied."
+fi
+
+echo ""
+echo "All patches applied. Restart dsh to take effect (tsx reads source directly)."
+echo "Verify: cd $CHECKOUT && pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts"
+echo ""
+echo "UA override: set DSH_APP_PRODUCT=cursor to send User-Agent: cursor/<version>"
+echo "  Preset aliases: cursor, claude-code, codex, opencode (see restart.sh)"

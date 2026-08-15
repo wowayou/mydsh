@@ -45,6 +45,25 @@ cd mydsh
 ./install.sh
 ```
 
+
+### User-Agent override (third-party relay compatibility)
+
+Some third-party API relays (New API / One API) block requests with `User-Agent: deepseek-harness/...`.
+This patch makes the User-Agent overridable via environment variables:
+
+```bash
+# Preset aliases (recommended):
+DSH_UA_ALIAS=cursor ./restart.sh         # → User-Agent: cursor/<version>
+DSH_UA_ALIAS=claude-code ./restart.sh     # → User-Agent: claude-code/<version>
+DSH_UA_ALIAS=codex ./restart.sh           # → User-Agent: codex/<version>
+DSH_UA_ALIAS=opencode ./restart.sh       # → User-Agent: opencode/<version>
+
+# Or set a custom product name directly:
+DSH_APP_PRODUCT=my-app ./restart.sh
+```
+
+> **Note**: The version and URL stay from the harness package.json. Only the product name changes.
+> This patch is applied to the checkout alongside the sandbox patch via `./install.sh`.
 ### Requirements
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) installed and running

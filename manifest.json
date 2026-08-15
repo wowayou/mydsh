@@ -13,7 +13,8 @@
       { "from": "client/ui-annotate/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-annotate/", "kind": "client-plugin", "note": "Codex 式回复批注（localStorage）" },
       { "from": "client/ui-session-tabs/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-session-tabs/", "kind": "client-plugin", "note": "多会话新标签页（?session= 深链）" },
       { "from": "client/ui-video/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-video/", "kind": "client-plugin", "note": "消息内本地视频/音频播放" },
-      { "from": "patches/sandbox-same-mode-escalation.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "sandbox 同模式升级 no-op（修复非 DeepSeek 模型 full-access 报错）" }
+      { "from": "patches/sandbox-same-mode-escalation.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "sandbox 同模式升级 no-op（修复非 DeepSeek 模型 full-access 报错）" },
+      { "from": "patches/user-agent-override.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "User-Agent 环境变量覆盖（DSH_APP_PRODUCT / DSH_APP_URL）" }
     ],
     "patchRows": {
       "file": "$DSH_HOME/profiles/web/cordis.patch.yml",

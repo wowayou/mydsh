@@ -1,0 +1,16 @@
+diff --git a/packages/llm/llm/src/attribution.ts b/packages/llm/llm/src/attribution.ts
+index 42980939cc..ce9fea026d 100644
+--- a/packages/llm/llm/src/attribution.ts
++++ b/packages/llm/llm/src/attribution.ts
+@@ -38,9 +38,9 @@ export interface AppIdentity {
+  * can suppress attribution entirely.
+  */
+ export const APP_IDENTITY: AppIdentity = {
+-  product: 'deepseek-harness',
++  product: process.env.DSH_APP_PRODUCT ?? 'deepseek-harness',
+   version,
+-  url: 'https://github.com/deepseek-ai/deepseek-harness',
++  url: process.env.DSH_APP_URL ?? 'https://github.com/deepseek-ai/deepseek-harness',
+ }
+ 
+ /**

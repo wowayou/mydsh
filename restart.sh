@@ -48,6 +48,17 @@ echo "== Starting dsh web (:${PORT}) =="
 cd "$CHECKOUT"
 # --expose-internals: enables cordis-plugin-hmr to access Node internal module
 # loader, activating config HMR (cordis.patch.yml edits take effect live).
+# UA alias: set DSH_APP_PRODUCT to spoof the User-Agent for third-party relay compatibility.
+# Common presets:
+#   DSH_UA_ALIAS=cursor      → User-Agent: cursor/<version>
+#   DSH_UA_ALIAS=claude-code → User-Agent: claude-code/<version>
+#   DSH_UA_ALIAS=codex       → User-Agent: codex/<version>
+#   DSH_UA_ALIAS=opencode    → User-Agent: opencode/<version>
+# Or set DSH_APP_PRODUCT directly for a custom value.
+if [ -n "$DSH_UA_ALIAS" ]; then
+  export DSH_APP_PRODUCT="$DSH_UA_ALIAS"
+  echo "  UA alias: $DSH_UA_ALIAS"
+fi
 nohup node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port "$PORT" >>"$LOG" 2>&1 &
 echo "  new PID: $!, log: $LOG"
 
