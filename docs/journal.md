@@ -98,3 +98,32 @@
 - [A] git 初始提交 `08ed94e`；全部验证脚本（tests/）入库。
 - [TODO] 用户侧收尾：重启 `pnpm dsh web --port 3081` 让 sandbox 补丁 + 最新插件代码
   生效；浏览器刷新；新会话选择「mydsh 模式」实测。
+
+## 2026-08-15 目标回合 1（收尾与重启前验证）
+
+- [A] 深入核对事件投递机制：Cordis 子上下文经 `extend()`（Object.create 原型链）共享
+  根 Context 的 EventsService（单一 `_hooks` 表）；`agent/status` 由
+  `agentEvents(loopCtx, agent)` 在 loopCtx 上以 scope carrier 分发，
+  `scopeTarget` 过滤器对**未打 scope 标签**的监听器放行（`tag === undefined → true`）。
+  → 根级 notify 监听器在机制上应当收到事件。
+- [B] 但线上 `notify.jsonl` 为空。推测：本会话是 goal-round 自动续跑，agent 状态的
+  running/idle 切换时机与普通会话不同（或插件挂载后未出现下降沿）；也可能是挂载时序。
+  为可诊断，`host/notify.ts` 增加：
+  - apply 时写 `plugin-started` 心跳；
+  - 每次 `agent-status` 变化（prev/status）都写一条日志（不只下降沿）。
+  重启后据此即可区分「没挂载 / 没事件 / 逻辑问题」。
+- [A] 新增 `restart.sh`：幂等重启 dsh web（按命令行匹配杀旧进程 → 同款
+  `node --import tsx/esm apps/cli/src/bin.ts web --port 3081` 拉起 → 等端口就绪），
+  日志写 `$DSH_HOME/mydsh/dsh-restart.log`。用于让 sandbox 补丁 + media.ts 修复上线。
+- [A] 环境确认：WSL + WSLg（DISPLAY=:0 / WAYLAND_DISPLAY=wayland-0），
+  `notify-send` 可用性待重启后由探测结果确认。
+- [V] 重启前终检全部通过：
+  - smoke.mjs（改以 DSH_HOME=/tmp/mydsh-smoke-home 隔离日志副作用）23 项全过；
+  - check-preset.mjs 31 行全过；profile patch YAML 6 行就位；
+  - 线上 `__DSH_BOOT__` 含 4 个 @mydsh 客户端插件，bundle 200 可服务。
+- [TODO] 用户重启后（`./restart.sh` 或手动），下一回合验证：
+  (1) notify.jsonl 出现 `plugin-started` 心跳 + 真实会话的 agent-status 记录；
+  (2) `/mydsh-media` 用真实文件 200/206（修复上线）；
+  (3) 同模式 sandbox 升级在 "never" 审批下直接放行（补丁上线，可直接用
+      `sandbox_permissions: danger-full-access` 同模式请求验证不再报错）；
+  (4) 浏览器刷新后新会话选「mydsh 模式」实测。

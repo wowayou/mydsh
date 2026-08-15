@@ -54,11 +54,22 @@ export function apply(ctx: Context): void {
   // 记录每个 agent 的最近状态，只在 running → idle 的下降沿发提醒，避免重复轰炸。
   const lastStatus = new Map<string, string>()
 
+  // 自诊断心跳：插件 apply 生效即落一条日志（也用于确认 host 行确实挂载）。
+  try {
+    appendFileSync(LOG_FILE, `${JSON.stringify({ t: new Date().toISOString(), event: 'plugin-started' })}\n`)
+  } catch { /* noop */ }
+
   ctx.on('agent/status', (payload: { agent?: { id?: unknown; sessionId?: unknown; title?: unknown }; status: string }) => {
     const { agent, status } = payload
     const sessionId = sessionLabel(agent)
     const prev = lastStatus.get(sessionId)
     lastStatus.set(sessionId, status)
+    // 诊断：每次状态变化都落一条记录（transition + 时间），方便回溯与排障。
+    try {
+      appendFileSync(LOG_FILE, `${JSON.stringify({ t: new Date().toISOString(), event: 'agent-status', sessionId, prev: prev ?? null, status })}\n`)
+    } catch {
+      // 日志失败不阻断通知。
+    }
     if (!(prev === 'running' && status === 'idle')) return
 
     const record = { t: new Date().toISOString(), event: 'agent-idle', sessionId }

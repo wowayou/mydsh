@@ -51,9 +51,11 @@ mydsh/
 验证：
 
 ```bash
-# 插件冒烟测试（需在 harness checkout 内运行，tsx 解析 .ts）
+# 插件冒烟测试（需在 harness checkout 内运行，tsx 解析 .ts；
+# DSH_HOME 指向临时目录，避免测试写入真实日志）
 cd /home/forbackup/deepseek-harness
-NODE_PATH=$HOME/.dsh/profiles/node_modules node --import tsx/esm /home/forbackup/Dev/mydsh/tests/smoke.mjs
+DSH_HOME=/tmp/mydsh-smoke-home NODE_PATH=$HOME/.dsh/profiles/node_modules \
+  node --import tsx/esm /home/forbackup/Dev/mydsh/tests/smoke.mjs
 
 # 预设行解析校验
 node /home/forbackup/Dev/mydsh/tests/check-preset.mjs
