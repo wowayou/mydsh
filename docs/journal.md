@@ -80,3 +80,21 @@
   - 核心 attachment 通道 v1 仅图片；视频走「绝对路径 + /mydsh-media 路由」方案。
   - 批注 v1 存浏览器 localStorage；升级到 host 存储（模型可见）留作 v2。
   - 文件上传（非图片）行为待实测确认（用户标注"待确定"）。
+
+### 补充记录（同日）
+
+- [F] `host/media.ts` 双 decode bug：先对整条 pathname `decodeURIComponent` 会把
+  `%2F` 还原成 `/`，破坏「单编码段」判定 → 改为只对后缀段解码。已在仓库修复，
+  smoke 测试直接驱动 handler 验证 200 / 206 Range / 404 全部通过。
+- [B] 模块级热重载在当前 web profile 是关闭的（bundle 注释：TODO 待测）。
+  因此**插件代码**的改动（media.ts 修复、sandbox 补丁）必须重启 dsh 进程才生效；
+  patch 配置行（增删插件行）则可热重载（实测：写 patch 后 `__DSH_BOOT__` 图立即
+  出现 4 个 @mydsh 客户端插件）。
+- [A] `install.sh` 幂等修正：splice 输出归一化（只留一个结尾换行），重复执行零漂移。
+- [V] 幂等实测：连续两次 `./install.sh --no-patch`，patch 文件 diff 为空。
+- [V] 文件上传（非图片）结论：composer 草稿模型只有 text + `imageIds`，核心
+  attachment 通道 v1 仅收图片（png/jpeg/webp/gif）→ **非图片文件暂不能经输入框上传**，
+  视频/其它文件走「绝对路径引用 + /mydsh-media 路由」方案（用户标注"待确定"，此处已定案）。
+- [A] git 初始提交 `08ed94e`；全部验证脚本（tests/）入库。
+- [TODO] 用户侧收尾：重启 `pnpm dsh web --port 3081` 让 sandbox 补丁 + 最新插件代码
+  生效；浏览器刷新；新会话选择「mydsh 模式」实测。

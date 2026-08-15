@@ -104,8 +104,10 @@ else:
 # 丢弃 before 里的空数组 / 孤立反斜杠 / 空行，但保留注释与用户条目。
 kept = [ln for ln in before.splitlines() if ln.strip() not in ('', '[]', '\\')]
 before = '\n'.join(kept) + '\n' if kept else ''
+# 归一化：整份文件只保留一个结尾换行（幂等，避免每次运行多一个空行）。
+result = (before + block + after).rstrip('\n') + '\n'
 with open(path, 'w', encoding='utf-8') as f:
-    f.write(before + block + after)
+    f.write(result)
 print('  patch 行已写入:', path)
 PYEOF
 fi
