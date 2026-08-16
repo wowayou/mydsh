@@ -72,8 +72,19 @@ function serveFile(req: IncomingMessage, res: ServerResponse, filePath: string):
   if (range !== undefined) {
     const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim())
     if (match !== null) {
-      const start = match[1] !== '' ? Number.parseInt(match[1], 10) : 0
-      const end = match[2] !== '' ? Number.parseInt(match[2], 10) : stat.size - 1
+      // RFC 7233：`bytes=-N` 表示「最后 N 字节」（后缀形式），start = size - N；
+      // `bytes=N-` 表示「从 N 到结尾」；`bytes=N-M` 表示闭区间。
+      let start: number
+      let end: number
+      if (match[1] === '' && match[2] !== '') {
+        // 后缀形式：bytes=-N → 最后 N 字节
+        const suffix = Number.parseInt(match[2], 10)
+        start = Math.max(0, stat.size - suffix)
+        end = stat.size - 1
+      } else {
+        start = match[1] !== '' ? Number.parseInt(match[1], 10) : 0
+        end = match[2] !== '' ? Number.parseInt(match[2], 10) : stat.size - 1
+      }
       if (Number.isFinite(start) && Number.isFinite(end) && start >= 0 && start <= end && start < stat.size) {
         const clampedEnd = Math.min(end, stat.size - 1)
         res.writeHead(206, {

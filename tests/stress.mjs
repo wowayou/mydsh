@@ -151,6 +151,22 @@ console.log('\n── B. host/media 并发 Range 请求 + 流错误 ──')
   // B4: 越界 start（>= size）—— 修复后应返回 416
   const oob = await call(`/mydsh-media/${enc}`, { range: `bytes=${bigSize}-` })
   check('越界 start 返回 416', oob.statusCode === 416, `got ${oob.statusCode}`)
+
+  // B5: 后缀 Range（bytes=-N）—— RFC 7233 语义：返回最后 N 字节
+  const suffixN = 5
+  const suffix = await call(`/mydsh-media/${enc}`, { range: `bytes=-${suffixN}` })
+  check('后缀 range bytes=-5 返回 206', suffix.statusCode === 206, `got ${suffix.statusCode}`)
+  // bigSize=1MB，文件内容前 1024 字节是 (i/1024)%256 模式，最后 5 字节是固定 0x41*5
+  // 直接断言 content-range 与 body 大小
+  check('后缀 range 返回最后 N 字节', suffix.statusCode === 206
+    && suffix.headers['content-range'] === `bytes ${bigSize - suffixN}-${bigSize - 1}/${bigSize}`
+    && suffix.body.length === suffixN,
+    `content-range=${suffix.headers['content-range']} body=${suffix.body.length}`)
+  // 后缀超过文件大小：clamp 到整个文件（bytes=-9999999 → 全文件）
+  const suffixBig = await call(`/mydsh-media/${enc}`, { range: 'bytes=-99999999' })
+  check('后缀 range 超长 clamp 到全文件', suffixBig.statusCode === 206
+    && suffixBig.headers['content-range'] === `bytes 0-${bigSize - 1}/${bigSize}`,
+    `content-range=${suffixBig.headers['content-range']}`)
 }
 
 // ── C. notify-tool 并发 execute ──────────────────────────────────────────
@@ -547,6 +563,18 @@ console.log('\n── H. 全项目 UI 语言统一 ──')
   check('重置按钮 warn 色', /--dsw-alias-state-warn-primary/.test(notifyCode))
   // 文件输入隐藏
   check('文件输入隐藏', /style: \{ display: 'none' \}/.test(notifyCode))
+  // ── ui-video：observer 增量扫描（性能）──
+  const videoCode = readFileSync(join(PROJECT, 'client/ui-video/lib/client.js'), 'utf8')
+  check('ui-video 增量扫描 addedNodes（不全量扫 body）', /addedNodes/.test(videoCode), '性能：只处理新增节点')
+  check('ui-video 初始全量扫一次 body', /upgrade\(document\.body\)/.test(videoCode))
+  check('ui-video observer 生命周期经 ctx.effect', /ctx\.effect/.test(videoCode))
+  // ── host/notify：session/disposed 清理 lastStatus（内存）──
+  const hostNotify = readFileSync(join(PROJECT, 'host/notify.ts'), 'utf8')
+  check('notify 监听 session/disposed 清理 Map', /session\/disposed/.test(hostNotify) && /lastStatus\.delete/.test(hostNotify))
+
+  // ── media.ts：后缀 Range 修复（功能）──
+  const mediaCode = readFileSync(join(PROJECT, 'host/media.ts'), 'utf8')
+  check('media 处理后缀 Range bytes=-N', /match\[1\] === '' && match\[2\] !== ''/.test(mediaCode))
 }
 
 console.log(failures === 0 ? `\n压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)

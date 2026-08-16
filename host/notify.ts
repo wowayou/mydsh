@@ -79,8 +79,7 @@ export function apply(ctx: Context): void {
     const { agent, status } = payload
     const sessionId = sessionLabel(agent)
     const prev = lastStatus.get(sessionId)
-    lastStatus.set(sessionId, status)
-    // 诊断：每次状态变化都落一条记录（transition + 时间），方便回溯与排障。
+    lastStatus.set(sessionId, status)    // 诊断：每次状态变化都落一条记录（transition + 时间），方便回溯与排障。
     try {
       appendFileSync(LOG_FILE, `${JSON.stringify({ t: new Date().toISOString(), event: 'agent-status', sessionId, prev: prev ?? null, status })}\n`)
     } catch {
@@ -119,5 +118,11 @@ export function apply(ctx: Context): void {
     if (canNotify) {
       execFile('notify-send', ['--app-name=mydsh', '⚠️ 需要确认', body], { timeout: 5000 }, () => {})
     }
+  })
+
+  // 会话销毁时清理 lastStatus 条目，避免 Map 无界增长（长期运行内存泄漏）。
+  ctx.on('session/disposed', (session: { id?: unknown }) => {
+    const sessionId = String(session?.id ?? '')
+    if (sessionId !== '') lastStatus.delete(sessionId)
   })
 }

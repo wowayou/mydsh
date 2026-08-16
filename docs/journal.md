@@ -645,3 +645,40 @@ LanguageRow（设置 General 的语言行）标准模式：
 - stress 新增 H 节（15 项统一断言）：OpenTabAction trigger 语言、
   SoundSettings ghost 按钮语言、负向断言（不用旧 pill/13px/14px 怪异尺寸）
 - 全绿：stress 106/106、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 发布前审计：修复 3 个问题
+
+### 审计范围
+功能 / 安全 / 性能 三维度，覆盖全部 6 个活跃源文件（host×2、preset×2、client×2）
++ patches + install.sh。
+
+### 发现并修复
+
+1. **【功能】media.ts Range 后缀 bug（RFC 7233）**
+   - `bytes=-N`（后缀形式）语义是「最后 N 字节」，原实现错误返回「前 N 字节」
+     （start 默认为 0）。视频 seek 尾部可能错位。
+   - 修复：match[1]==='' 时 start = max(0, size - N)，end = size - 1；
+     超长后缀 clamp 到全文件。
+   - 测试：stress B 节新增 2 项（bytes=-5 返回最后 5 字节 + content-range 正确、
+     超长 clamp 全文件）。
+
+2. **【性能】ui-video MutationObserver 全量扫描**
+   - 每次 DOM 变化都 `upgrade(document.body)` querySelectorAll 整个 body，
+     长会话/大消息列表下卡顿。
+   - 修复：只扫描 MutationRecord.addedNodes 里的新节点（增量），初始扫一次 body。
+   - 测试：stress H 节断言 addedNodes 存在。
+
+3. **【性能/内存】notify lastStatus Map 无界增长**
+   - 每个会话一条状态记录，会话销毁后条目残留。
+   - 修复：监听 session/disposed 时 lastStatus.delete(id)。
+   - 测试：stress H 节断言 disposed 清理存在。
+
+### 安全审计结论（不修的项）
+- media 路由无 Origin 请求放行：`<video>` 标签的媒体请求本就不带 Origin，
+  必须放行才能播放；本机 127.0.0.1 工具，风险可接受。
+- ui-video 不拦 file:// scheme：encodeURIComponent 后 media 路由 decodePath
+  检查 decoded.startsWith('/')，file:// 不以 / 开头被拒绝，有安全兜底。
+- execFile 传参数组不经 shell，无注入风险。
+
+### 回归
+stress 116/116、smoke 35/35、check-preset 41/41 全绿；host 插件编译验证通过。

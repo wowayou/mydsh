@@ -57,7 +57,16 @@ window.__ModuleLoader__.load({
 			started = true;
 			const boot = () => {
 				upgrade(document.body);
-				const observer = new MutationObserver(() => { upgrade(document.body); });
+				// 增量扫描：只处理 MutationRecord.addedNodes 里的新节点，
+				// 不全量 querySelectorAll(body)——长会话下每次 DOM 变化全扫会卡。
+				const observer = new MutationObserver((records) => {
+					for (const record of records) {
+						for (const node of record.addedNodes) {
+							if (!node || node.nodeType !== 1) continue;
+							upgrade(node);
+						}
+					}
+				});
 				observer.observe(document.body, { childList: true, subtree: true });
 				window.__mydshVideoObserver = observer;
 			};
