@@ -525,3 +525,32 @@ DSH 原生语言。这次系统性提取设计令牌，禁止再凭感觉。
 - stress G 节视觉断言从 8 项扩到 21 项：每个令牌、每个尺寸、每个 gap 都有断言
   （含「不用 bg-overlay」负向断言），防止以后凭感觉改坏
 - 全绿：stress 85/85、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 「新建会话」改为设置选中弹窗形态 + 文案明确化
+
+### 用户反馈
+「做成设置的选中弹窗效果，文案也更加明确一些」
+
+### 调研：DSH 设置选中弹窗的真实形态
+LanguageRow（设置 General 的语言行）标准模式：
+- 行 = 标题 + 右侧 **selector pill**（当前值 + chevron 下拉箭头）
+- selector: h36 / r18 / bg-module-platform / pad 0 14 / gap 12 / 14-22
+- 点击弹 Menu，选中项 trailing check（label-primary），selectedId 高亮
+
+### 实现（对照 LanguageRow.module.css .selector + Menu .check）
+1. 按钮从「图标+新建」trigger 改为 **selector pill**：
+   - 文件夹图标 + 「新建会话」文字 + chevron（wide）
+   - h36 / r18 / bg-module-platform / pad 0 14 / gap 12（完全复刻 .selector）
+   - 折叠 rail：36px 圆形只留文件夹图标
+2. 菜单项加 **选中 ✓ 标记**（DSH 同款 IconCheckOutline16 path，label-primary）
+3. 默认选中最近工作区（recentWorkspaceId）——用户能看到当前默认目标
+4. 文案明确：
+   - 按钮 aria-label：「新建会话：选择目标工作区（将打开新标签页）」
+   - 菜单头部问句：「新建会话到哪个工作区？」
+   - 按钮文字：「新建会话」（不是含糊的「新建」）
+5. 删掉不再使用的 NewChatIcon（按钮换文件夹图标）
+
+### 测试
+- stress G 节视觉断言重写为 selector pill 形态（36px/18px/bg-module-platform/
+  pad 0 14/chevron/check/recentWorkspaceId/文案断言）
+- 全绿：stress 88/88、smoke 35/35、check-preset 41/41

@@ -133,7 +133,7 @@ mydsh/
 | 任务完成没提醒 | 主机层监听 `agent/status`（running→idle）：写 JSONL 日志 + `notify-send`；浏览器插件：Notification API + 提示音（页面后台时才提醒） | 主机 + 浏览器 |
 | 主动通知 | 模型可调 `notify_user(title, body)` 工具 | 预设 |
 | 文本模型看不懂图片 | `vision_describe(path, prompt)` —— modlens 视觉助手：复用图片提交通道，调 qwen-vl-max 生成描述回给文本模型 | 预设 |
-| 多 Session 新窗口 | 会话头操作行「⧉」按钮：复制 `?session=<id>` 深链并在新标签页打开；各标签页各选各的会话互不干扰。侧栏底部「新建」按钮：弹出工作区选择框，选定后在该工作区下新建会话并在新标签页打开（无工作区时退化为打开空标签页） | 浏览器 |
+| 多 Session 新窗口 | 会话头操作行「⧉」按钮：复制 `?session=<id>` 深链并在新标签页打开；各标签页各选各的会话互不干扰。侧栏底部「新建会话」selector pill（设置选中弹窗形态）：点击弹出工作区选择菜单（选中项带 ✓），选定后在该工作区下新建会话并新标签页打开（无工作区时退化为打开空标签页） | 浏览器 |
 | 视频支持 | 消息里以绝对路径写的媒体链接（`[demo.mp4](/abs/path/demo.mp4)`）自动渲染成可拖动的 `<video>/<audio>`（主机 `/mydsh-media` 路由带 Range 支持） | 主机 + 浏览器 |
 | 非 DeepSeek 模型 full-access 报错 | 对 harness 的最小补丁：同模式「升级」视为 no-op 直接放行（`patches/`，附单测与重放脚本） | 补丁 |
 

@@ -25,11 +25,17 @@ window.__ModuleLoader__.load({
 		}
 		var T = isZh()
 			? { openTab: '在新标签页打开本会话（链接已复制）', copied: '✓',
-			    newTabLabel: '在新标签页新建会话', newTab: '新建',
-			    workspacePick: '选择工作区' }
+			    newTabLabel: '新建会话', newTab: '新建会话',
+			    workspacePick: '新建会话到哪个工作区？',
+			    workspacePickAria: '新建会话：选择目标工作区（将打开新标签页）',
+			    noWorkspace: '暂无工作区',
+			    recentHint: '最近使用' }
 			: { openTab: 'Open this session in a new tab (link copied)', copied: '✓',
-			    newTabLabel: 'New session in a new tab', newTab: 'New',
-			    workspacePick: 'Choose a workspace' };
+			    newTabLabel: 'New session', newTab: 'New session',
+			    workspacePick: 'New session in which workspace?',
+			    workspacePickAria: 'New session: choose a workspace (opens a new tab)',
+			    noWorkspace: 'No workspace yet',
+			    recentHint: 'Recent' };
 
 		function deepLink(sessionId) {
 			try {
@@ -115,18 +121,7 @@ window.__ModuleLoader__.load({
 		// 行为：点击弹出 workspace 选择框（浮层），选一个 workspace 后
 		// connectWorkspace(id) 拿到（复用或新建的）会话 id，再在新标签页深链打开。
 		// 没有 workspace 可选项时退化为「打开空标签页」（新标签页自己初始化）。
-		var NEW_CHAT_ICON_PATH =
-			'M8.00003 0.3237C3.76075 0.3237 0.32373 3.76072 0.32373 8C0.32373 9.17603 0.589121 10.2922 1.0632 11.2901L1.35291 11.8989L2.5705 11.3205L2.28079 10.7117C1.89079 9.89074 1.67301 8.97167 1.67301 8C1.67301 4.50546 4.50549 1.67298 8.00003 1.67298C11.4946 1.67298 14.3271 4.50546 14.3271 8C14.3271 11.4945 11.4946 14.327 8.00003 14.327C7.28473 14.327 6.76077 14.277 6.29621 14.1487C5.83857 14.0224 5.40441 13.8109 4.88514 13.4488C4.12569 12.919 3.03778 12.7316 2.141 13.2978L2.12682 13.307L2.11264 13.3171L1.34886 13.854L1.79659 15.188L2.86122 14.4384C3.19068 14.2305 3.68325 14.2542 4.11326 14.5539C4.72789 14.9826 5.30042 15.2724 5.93762 15.4484C6.56803 15.6224 7.22776 15.6763 8.00003 15.6763C12.2393 15.6763 15.6763 12.2393 15.6763 8C15.6763 3.76072 12.2393 0.3237 8.00003 0.3237ZM7.32033 4.82535V7.32536H4.82538V8.67464H7.32033V11.1747H8.6696V8.67464H11.1747V7.32536H8.6696V4.82535H7.32033Z';
-
-		function NewChatIcon() {
-			return createElement('svg', {
-				width: 16, height: 16, viewBox: '0 0 16 16',
-				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
-				'aria-hidden': true, style: { flexShrink: 0 },
-			}, createElement('path', { d: NEW_CHAT_ICON_PATH, fill: 'currentColor' }));
-		}
-
-		// DSH 同款 ic_ds_folder_close_16 path（菜单项 leading 图标，workspace 语义）。
+		// DSH 同款 ic_ds_folder_close_16 path（按钮 + 菜单项 leading 图标，workspace 语义）。
 		var FOLDER_ICON_PATH =
 			'M5.05582 0.518756L4.50669 0.86654L5.05582 0.518756ZM13 9.4837L13.65 9.4837L13.65 3.53962L13 3.53962L12.35 3.53962L12.35 9.4837L13 9.4837ZM11.3264 1.86603L11.3264 1.21603L6.52313 1.21603L6.52313 1.86603L6.52313 2.51603L11.3264 2.51603L11.3264 1.86603ZM5.58054 1.34727L6.12968 0.999489L5.60495 0.170972L5.05582 0.518756L4.50669 0.86654L5.03141 1.69506L5.58054 1.34727ZM4.11323 1.23058e-13L4.11323 -0.65L1.67359 -0.65L1.67359 5.00699e-14L1.67359 0.65L4.11323 0.65L4.11323 1.23058e-13ZM0 1.67359L-0.65 1.67359L-0.65 9.4837L0 9.4837L0.65 9.4837L0.65 1.67359L0 1.67359ZM11.3264 11.1573L11.3264 10.5073L1.67359 10.5073L1.67359 11.1573L1.67359 11.8073L11.3264 11.8073L11.3264 11.1573ZM0 9.4837L-0.65 9.4837C-0.65 10.767 0.390308 11.8073 1.67359 11.8073L1.67359 11.1573L1.67359 10.5073C1.10828 10.5073 0.65 10.049 0.65 9.4837L0 9.4837ZM1.67359 5.00699e-14L1.67359 -0.65C0.390307 -0.65 -0.65 0.390309 -0.65 1.67359L0 1.67359L0.65 1.67359C0.65 1.10828 1.10828 0.65 1.67359 0.65L1.67359 5.00699e-14ZM5.05582 0.518756L5.60495 0.170972C5.28121 -0.340193 4.71829 -0.65 4.11323 -0.65L4.11323 1.23058e-13L4.11323 0.65C4.27282 0.65 4.4213 0.731715 4.50669 0.86654L5.05582 0.518756ZM6.52313 1.86603L6.52313 1.21603C6.36354 1.21603 6.21507 1.13431 6.12968 0.999489L5.58054 1.34727L5.03141 1.69506C5.35515 2.20622 5.91808 2.51603 6.52313 2.51603L6.52313 1.86603ZM13 3.53962L13.65 3.53962C13.65 2.25634 12.6097 1.21603 11.3264 1.21603L11.3264 1.86603L11.3264 2.51603C11.8917 2.51603 12.35 2.97431 12.35 3.53962L13 3.53962ZM13 9.4837L12.35 9.4837C12.35 10.049 11.8917 10.5073 11.3264 10.5073L11.3264 11.1573L11.3264 11.8073C12.6097 11.8073 13.65 10.767 13.65 9.4837L13 9.4837Z';
 
@@ -136,6 +131,30 @@ window.__ModuleLoader__.load({
 				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
 				'aria-hidden': true,
 			}, createElement('path', { transform: 'translate(1.5 2.429)', d: FOLDER_ICON_PATH, fill: 'currentColor' }));
+		}
+
+		// DSH 同款 ic_ds_chevron_down_outline_14（selector pill 下拉箭头）。
+		var CHEVRON_PATH =
+			'M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z';
+
+		function ChevronIcon() {
+			return createElement('svg', {
+				width: 14, height: 14, viewBox: '0 0 14 14',
+				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+				'aria-hidden': true, style: { flexShrink: 0 },
+			}, createElement('path', { d: CHEVRON_PATH, fill: 'currentColor' }));
+		}
+
+		// DSH 同款 ic_ds_check_outline_16（菜单选中项 trailing check）。
+		var CHECK_PATH =
+			'M15.0498 3.92579L8.49512 12.3818C8.25774 12.6881 8.04517 12.9645 7.84668 13.1689C7.63957 13.3823 7.38732 13.5841 7.04492 13.6719C6.86373 13.7183 6.6757 13.7346 6.48926 13.7197C6.13666 13.6915 5.8528 13.5355 5.6123 13.3604C5.38201 13.1926 5.12573 12.9567 4.83984 12.6953L1.03125 9.21289L1.96875 8.1875L5.77734 11.6699C6.08684 11.9529 6.27773 12.1249 6.43066 12.2363C6.50183 12.2882 6.54699 12.3135 6.57324 12.3252C6.58525 12.3305 6.59269 12.3322 6.5957 12.333C6.59802 12.3336 6.59961 12.334 6.59961 12.334C6.63317 12.3367 6.66758 12.3335 6.7002 12.3252C6.7002 12.3252 6.70211 12.3251 6.7041 12.3242C6.70698 12.3229 6.71348 12.319 6.72461 12.3115C6.74849 12.2956 6.78843 12.2642 6.84961 12.2012C6.98138 12.0654 7.13957 11.8628 7.39648 11.5313L13.9502 3.07422L15.0498 3.92579Z';
+
+		function CheckIcon() {
+			return createElement('svg', {
+				width: 16, height: 16, viewBox: '0 0 16 16',
+				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+				'aria-hidden': true, style: { flexShrink: 0 },
+			}, createElement('path', { d: CHECK_PATH, fill: 'currentColor' }));
 		}
 
 		// ── workspace 选择纯逻辑（可测） ─────────────────────────────────
@@ -197,8 +216,14 @@ window.__ModuleLoader__.load({
 			var isOpen = menuOpen[0]; var setOpen = menuOpen[1];
 			var anchorRef = useRef(null);
 
-			// 选择框内容：workspace 列表快照（打开时取一次）。
-			var choices = isOpen ? workspaceChoices(workspaces && workspaces.list ? workspaces.list.getSnapshot() : null) : [];
+			// 选择框内容：workspace 列表快照 + 最近使用的工作区（默认选中标记）。
+			var recentId = null;
+			var choices = [];
+			if (isOpen && workspaces && workspaces.list) {
+				var snap = workspaces.list.getSnapshot();
+				choices = workspaceChoices(snap);
+				recentId = snap && snap.recentWorkspaceId ? snap.recentWorkspaceId : null;
+			}
 
 			var onPick = useCallback(function(id) {
 				setOpen(false);
@@ -236,19 +261,21 @@ window.__ModuleLoader__.load({
 				};
 			}, [isOpen]);
 
-			// 按钮：对齐 SettingsRoot.module.css .trigger（rail 对齐 .trigger.rail）。
+			// 按钮：设置选中弹窗形态（LanguageRow selector pill）——
+			//   h36 / r18 / bg-module-platform / pad 0 14 / gap 12 / 文字 + chevron。
+			//   rail 折叠：36px 圆形只留文件夹图标（对齐 .trigger.rail）。
 			var baseStyle = {
 				flex: 'none',
-				display: 'inline-flex', alignItems: 'center', gap: '8px',
+				display: 'inline-flex', alignItems: 'center', gap: '12px',
 				boxSizing: 'border-box',
 				width: wide ? 'auto' : '36px',
-				height: wide ? '34px' : '36px',
+				height: wide ? '36px' : '36px',
 				margin: wide ? '4px -4px 4px' : '8px 0 10px',
-				padding: wide ? '6px 2px 6px 10px' : '0',
+				padding: wide ? '0 14px' : '0',
 				justifyContent: wide ? 'flex-start' : 'center',
 				border: 'none',
-				borderRadius: wide ? '12px' : '50%',
-				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
+				borderRadius: wide ? '18px' : '50%',
+				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-module-platform)',
 				cursor: 'pointer',
 				overflow: 'hidden',
 				color: 'var(--dsw-alias-label-primary)',
@@ -277,7 +304,7 @@ window.__ModuleLoader__.load({
 				color: 'var(--dsw-alias-label-tertiary)',
 				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
 			};
-			// 菜单项：复刻 Menu.module.css .item（单行 icon + label）。
+			// 菜单项：复刻 Menu.module.css .item（单行 icon + label + trailing check）。
 			var itemStyle = {
 				display: 'flex', alignItems: 'center', gap: '8px',
 				width: '100%', minHeight: '40px',
@@ -299,6 +326,10 @@ window.__ModuleLoader__.load({
 				flex: '1', minWidth: '0',
 				overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 			};
+			// trailing check：复刻 Menu .check（label-primary）。
+			var checkStyle = {
+				flex: 'none', color: 'var(--dsw-alias-label-primary)',
+			};
 
 			return createElement('span', { style: { position: 'relative', display: 'inline-flex' }, ref: anchorRef },
 				createElement('button', {
@@ -306,24 +337,29 @@ window.__ModuleLoader__.load({
 					onClick: onToggle,
 					onMouseEnter: function() { setHovered(true); },
 					onMouseLeave: function() { setHovered(false); },
-					'aria-label': T.newTabLabel, title: T.newTabLabel,
+					'aria-label': T.workspacePickAria, title: T.workspacePickAria,
 					'aria-haspopup': 'menu', 'aria-expanded': isOpen || undefined,
 					style: baseStyle,
-				}, createElement(NewChatIcon, {}),
-					wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, T.newTab) : null),
+				}, createElement(FolderIcon, {}),
+					wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, T.newTab) : null,
+					wide ? createElement(ChevronIcon, {}) : null),
 				isOpen ? createElement('div', {
 					role: 'menu', style: menuStyle,
 				},
 					createElement('div', { style: headerStyle, role: 'presentation' }, T.workspacePick),
 					choices.map(function(c) {
+						var isSelected = c.id === recentId;
 						return createElement('button', {
 							type: 'button', role: 'menuitem', key: c.id,
 							onClick: function() { onPick(c.id); },
+							'aria-checked': isSelected || undefined,
 							style: itemStyle,
 						},
 							createElement('span', { style: itemIconStyle },
 								createElement(FolderIcon, {})),
-							createElement('span', { style: itemLabelStyle, title: c.path }, c.title));
+							createElement('span', { style: itemLabelStyle, title: c.path }, c.title),
+							isSelected ? createElement('span', { style: checkStyle },
+								createElement(CheckIcon, {})) : null);
 					}),
 				) : null,
 			);
