@@ -461,3 +461,32 @@ stress 49/49、smoke 35/35、check-preset 41/41 全绿。
 ### 测试
 - stress G 节新增 8 项视觉调性断言（34px/12px/14px/label-primary/hover/图标/rail 36px 圆形）
 - 全绿：stress 57/57、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 「新建会话在新标签页」加 workspace 选择
+
+### 需求
+用户反馈：现在点「新建」只是打开一个新标签页，新标签页还是落到默认
+workspace。希望在进入时弹出选框，选择要在哪个 workspace 下建会话。
+
+### 实现
+NewTabButton 行为变更：
+1. 点击 → 弹出 workspace 选择框（浮层，对齐 DSH Menu 语言：
+   bg-overlay / border-l2 / 12px 圆角 / title + path 副标题 / 点击外部关闭）
+2. 选中 workspace → `workspaces.connectWorkspace(id)` 拿会话 id
+   （复用该 workspace 的空白会话，没有则新建）→ `window.open(deepLink(id))`
+   新标签页通过 ?session= 深链直达该会话
+3. 无 workspace 可选项 → 退化为打开空标签页（新标签页自己初始化）
+
+为什么 connectWorkspace 而不是打开空 URL：
+- connectWorkspace 返回 Promise<SessionId>，精确控制「哪个 workspace 的新会话」，
+  避免新标签页自己 startInitialSelection 猜 workspace
+- 新标签页是独立前端实例，?session= 深链 + UrlSessionOpener 等列表 ready 后 open，
+  时序安全（创建后 host 广播，新标签页 list 拉到即打开）
+
+### 测试
+- __test 新增导出 workspaceChoices / openNewTabInWorkspace
+- stress G 节新增 15 项断言：
+  - workspaceChoices：提取 id/title/path、空列表、异常安全
+  - openNewTabInWorkspace：选 workspace 打开深链、无 workspaceId fallback 空标签页、
+    无服务 fallback、异步失败不打开、同步抛错返回 error
+- 全绿：stress 72/72、smoke 35/35、check-preset 41/41

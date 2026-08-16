@@ -423,6 +423,55 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   check('NewTabButton hover 用 interactive-bg-hover', /interactive-bg-hover/.test(code))
   check('NewTabButton 用 DSH 同款 NewChat 图标', /NEW_CHAT_ICON_PATH/.test(code))
   check('NewTabButton rail 对齐 36px 圆形', /borderRadius: wide \? '12px' : '50%'/.test(code) && /width: wide \? 'auto' : '36px'/.test(code) && /height: wide \? '34px' : '36px'/.test(code))
+
+  // ── workspace 选择逻辑（openNewTabInWorkspace / workspaceChoices）──
+  if (t && typeof t.workspaceChoices === 'function' && typeof t.openNewTabInWorkspace === 'function') {
+    // workspaceChoices: 列表 → 选项
+    const list = { items: [
+      { workspaceId: 'w1', title: '项目A', path: '/home/forbackup/Dev/project-a' },
+      { workspaceId: 'w2', title: '项目B', path: '/tmp/b' },
+    ] }
+    const opts = t.workspaceChoices(list)
+    check('workspaceChoices 提取 id/title/path', opts.length === 2 && opts[0].id === 'w1' && opts[0].title === '项目A' && opts[0].path.endsWith('project-a'), JSON.stringify(opts))
+    check('workspaceChoices 空列表 → []', t.workspaceChoices(null).length === 0 && t.workspaceChoices({ items: [] }).length === 0)
+    check('workspaceChoices 异常安全', t.workspaceChoices(undefined).length === 0)
+
+    // openNewTabInWorkspace:
+    // 1) 选 workspace → connectWorkspace 返回 id → window.open(深链)
+    location.href = 'http://127.0.0.1:3081/'
+    let openedUrl = null
+    const fakeWin = { open: (u) => { openedUrl = u } }
+    const ws = { connectWorkspace: async (id) => `session-${id}-created` }
+    const r1 = t.openNewTabInWorkspace(ws, 'w1', fakeWin)
+    check('选 workspace 返回 opened', r1 === 'opened', r1)
+    // 等 promise 落定
+    await new Promise((r) => setTimeout(r, 20))
+    check('connectWorkspace 后打开深链', openedUrl === 'http://127.0.0.1:3081/?session=session-w1-created', String(openedUrl))
+    // 2) 无 workspaceId → fallback 打开空标签页
+    openedUrl = null
+    const r2 = t.openNewTabInWorkspace(ws, null, fakeWin)
+    check('无 workspaceId 走 fallback', r2 === 'fallback', r2)
+    await new Promise((r) => setTimeout(r, 20))
+    check('fallback 打开空标签页（无 session）', openedUrl === 'http://127.0.0.1:3081/', String(openedUrl))
+    // 3) 无 workspaces 服务 → fallback
+    openedUrl = null
+    const r3 = t.openNewTabInWorkspace(null, 'w1', fakeWin)
+    check('无 workspaces 服务走 fallback', r3 === 'fallback', r3)
+    await new Promise((r) => setTimeout(r, 20))
+    check('无服务 fallback 打开空标签页', openedUrl === 'http://127.0.0.1:3081/', String(openedUrl))
+    // 4) connectWorkspace reject → 不打开，返回 opened（异步失败记录）
+    openedUrl = null
+    const wsFail = { connectWorkspace: async () => { throw new Error('boom') } }
+    const r4 = t.openNewTabInWorkspace(wsFail, 'w1', fakeWin)
+    check('connectWorkspace 异步失败返回 opened（错误记录）', r4 === 'opened', r4)
+    await new Promise((r) => setTimeout(r, 20))
+    check('失败时不打开新标签页', openedUrl === null, String(openedUrl))
+    // 5) connectWorkspace 同步 throw → error
+    const wsThrow = { connectWorkspace: () => { throw new Error('sync') } }
+    check('connectWorkspace 同步抛错返回 error', t.openNewTabInWorkspace(wsThrow, 'w1', fakeWin) === 'error')
+  } else {
+    check('workspace 选择逻辑已导出', false, '__test 缺 workspaceChoices/openNewTabInWorkspace')
+  }
 }
 
 console.log(failures === 0 ? `\n压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)
