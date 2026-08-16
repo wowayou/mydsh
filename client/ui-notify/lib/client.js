@@ -2,7 +2,8 @@
 //
 // Two registrations:
 // 1. conversation.input.dock#mydsh-notify — null component, detects running→idle.
-// 2. settings.general.item#mydsh-notify-sound — settings row matching DSH design language.
+// (Settings panel registration removed: settings.general.item requires store/locale/inject
+//  props that our hand-written bundle doesn't provide, causing render crashes.)
 //
 // Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
 window.__ModuleLoader__.load({
