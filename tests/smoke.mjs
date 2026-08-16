@@ -74,6 +74,7 @@ function loadClientBundle(file) {
 const clientCases = [
   { name: 'ui-notify', file: join(PROJECT, 'client/ui-notify/lib/client.js'), slot: 'conversation.input.dock#mydsh-notify' },
   { name: 'ui-session-tabs', file: join(PROJECT, 'client/ui-session-tabs/lib/client.js'), slot: 'conversation.session.header.actions#mydsh-open-tab' },
+  { name: 'ui-session-tabs-footer', file: join(PROJECT, 'client/ui-session-tabs/lib/client.js'), slot: 'sidebar.footer.action#mydsh-new-tab' },
   { name: 'ui-video', file: join(PROJECT, 'client/ui-video/lib/client.js'), slot: null },
 ]
 

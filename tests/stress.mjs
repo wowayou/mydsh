@@ -358,6 +358,62 @@ console.log('\n── F. ui-notify scanner 性能 ──')
   check('scanner prev map 清理已消失会话', triggerCount === 1, `prev 清理后 a 重现应按基线（triggerCount 应=1，实际=${triggerCount}）`)
 }
 
+// ── G. ui-session-tabs 深链与空白标签页 URL 构造 ────────────────────────
+console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
+{
+  const code = readFileSync(join(PROJECT, 'client/ui-session-tabs/lib/client.js'), 'utf8')
+  const location = { href: '', search: '' }
+  const setGlobal = (name, value) => { try { Object.defineProperty(globalThis, name, { value, configurable: true, writable: true }) } catch {} }
+  function requireFn(id) { if (id === 'react') return REACT; throw new Error(`bundle require: ${id}`) }
+  // 加载拿到 __test（deepLink/blankTabUrl 读 window.location.href，每次取最新值）
+  const loadPlugin = () => {
+    let captured = null
+    const w = { __ModuleLoader__: { load: (spec) => { captured = spec; spec.exports = spec.factory(requireFn); } }, location }
+    setGlobal('window', w)
+    setGlobal('navigator', { language: 'zh-CN' })
+    vm.runInThisContext(code, { filename: 'ui-session-tabs.js' })
+    return captured.exports
+  }
+  const plugin = loadPlugin()
+  const t = plugin.__test
+  check('导出 __test', t && typeof t.blankTabUrl === 'function' && typeof t.deepLink === 'function')
+  if (t) {
+    // blankTabUrl: 必须移除 ?session= 但保留其他参数
+    location.href = 'http://127.0.0.1:3081/?session=abc-123'
+    check('blankTabUrl 移除 session 参数', t.blankTabUrl() === 'http://127.0.0.1:3081/', t.blankTabUrl())
+    location.href = 'http://127.0.0.1:3081/?other=x&session=abc'
+    check('blankTabUrl 保留其他参数', t.blankTabUrl() === 'http://127.0.0.1:3081/?other=x', t.blankTabUrl())
+    location.href = 'http://127.0.0.1:3081/'
+    check('blankTabUrl 无 session 时不变', t.blankTabUrl() === 'http://127.0.0.1:3081/', t.blankTabUrl())
+    location.href = 'http://127.0.0.1:3081/?session=a&session=b'
+    check('blankTabUrl 移除全部同名 session', !t.blankTabUrl().includes('session'), t.blankTabUrl())
+    // deepLink: 设置 session 参数（新增或覆盖）
+    location.href = 'http://127.0.0.1:3081/'
+    check('deepLink 新增 session', t.deepLink('xyz') === 'http://127.0.0.1:3081/?session=xyz', t.deepLink('xyz'))
+    location.href = 'http://127.0.0.1:3081/?session=old'
+    check('deepLink 覆盖 session', t.deepLink('new') === 'http://127.0.0.1:3081/?session=new', t.deepLink('new'))
+    location.href = 'http://127.0.0.1:3081/?other=x'
+    check('deepLink 保留其他参数', t.deepLink('s') === 'http://127.0.0.1:3081/?other=x&session=s', t.deepLink('s'))
+    // 互逆性：blankTabUrl(deepLink(id)) 移除 session
+    location.href = 'http://127.0.0.1:3081/'
+    check('blankTabUrl(deepLink(id)) 回到无 session', !t.blankTabUrl().includes('session'))
+  }
+
+  // apply 注册 3 个 slot
+  const registrations = []
+  const fakeSlots = {
+    inject: (_key, cb) => { try { cb({ wide: true }) } catch { try { cb() } catch {} }; return () => {} },
+    register: (opts, comp) => { registrations.push({ opts, comp }); return () => {} },
+  }
+  const fakeCtx = { get: (n) => (n === 'slots' ? fakeSlots : n === 'sessions' ? { open: () => {} } : undefined), effect: (fn) => { const d = fn(); return d ?? (() => {}) } }
+  plugin.apply(fakeCtx)
+  const ids = registrations.map((r) => r.opts.id)
+  check('apply 注册 3 个 slot', ids.length === 3, `got ${ids.join(',')}`)
+  check('注册 sidebar.footer.action#mydsh-new-tab', ids.includes('mydsh-new-tab'))
+  check('注册 conversation.session.header.actions#mydsh-open-tab', ids.includes('mydsh-open-tab'))
+  check('注册 conversation.input.dock#mydsh-url-session', ids.includes('mydsh-url-session'))
+}
+
 console.log(failures === 0 ? `\n压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)
 rmSync(TMP, { recursive: true, force: true })
 process.exit(failures === 0 ? 0 : 1)

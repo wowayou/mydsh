@@ -396,3 +396,38 @@
 - **appendFileSync 改异步/写锁**：单线程 JS 下 appendFileSync 不会交错，
   频率仍低，POSTMORTEM 决策「不采纳异步日志」在压测下验证成立（200 并发无损）。
   保持同步简单性。
+
+## 2026-08-16 多标签页功能扩展：新建会话从新标签页打开
+
+### 需求
+1. （已澄清）侧栏会话行 ⋮ 三点菜单加「在新标签页打开」——**暂不做**：
+   该菜单是 harness `ui-workspace` 包 `Rows.tsx` 硬编码的 `sessionMenuItems` 数组，
+   不是开放给第三方插件注册的 list slot，mydsh 无法直接注入菜单项，
+   必须改 harness 源码（侵入式补丁）。用户选择暂不做。
+2. 「新建会话直接从新标签页打开」——**已实现**。
+
+### 实现
+在 `ui-session-tabs` 加第 3 个注册项：`sidebar.footer.action#mydsh-new-tab`
+（侧栏底部 Settings 旁，order 0）。按钮点击行为：`window.open(blankTabUrl(), '_blank')`，
+其中 `blankTabUrl()` 移除当前 URL 的 `?session=` 参数。
+
+**为什么不调 `workspaces.connectWorkspace` 拿 session id 再深链？**
+- `startSession` 返回 void，内部 `connectWorkspace` 虽返回 `Promise<SessionId>`，
+  但那是为「在当前页打开」设计的导航流；在新标签页里这些会话状态不共享
+  （每个标签页是独立的 dsh 前端实例，有自己的 runtime）。
+- 更干净的做法：新标签页打开一个**不带 `?session=`** 的地址。dsh 的
+  `UrlSessionOpener` 只在有 `?session=` 时打开指定会话，没有参数时走标准的
+  `startInitialSelection` 流程——这正是「新建会话」的初始路径。
+  即「在新标签页新建会话」=「打开一个不带 session 参数的新标签页」。
+
+### 测试
+- smoke: 新增 `ui-session-tabs-footer` case，验证 `sidebar.footer.action#mydsh-new-tab` 注册。
+- stress 新增 G 节（13 项断言）：
+  - `blankTabUrl` 纯函数测试：移除 session、保留其他参数、无 session 不变、移除全部同名参数。
+  - `deepLink` 纯函数测试：新增/覆盖 session、保留其他参数。
+  - 互逆性：`blankTabUrl(deepLink(id))` 回到无 session。
+  - apply 注册 3 个 slot（open-tab + url-session + new-tab）。
+- bundle 通过 `__test` 导出 `deepLink`/`blankTabUrl` 供纯函数测试（沿用 ui-notify 的模式）。
+
+### 测试结果
+stress 49/49、smoke 35/35、check-preset 41/41 全绿。
