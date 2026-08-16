@@ -403,34 +403,63 @@ window.__ModuleLoader__.load({
 
 			var rowStyle = {
 				display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0',
-				borderBottom: '1px solid var(--dsw-alias-border-l2, #3a4152)',
+				borderBottom: '1px solid var(--dsw-alias-border-l2)',
 			};
 			var textSectionStyle = {
 				flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '4px',
+				paddingRight: '48px',
 			};
 			var titleStyle = {
 				fontSize: '14px', fontWeight: 400, lineHeight: '22px',
-				color: 'var(--dsw-alias-label-primary, #e6e9ef)',
+				color: 'var(--dsw-alias-label-primary)',
 			};
 			var subtitleStyle = {
 				fontSize: '12px', lineHeight: '18px',
-				color: hasCustom ? 'var(--dsw-alias-state-success-primary, #3fae6a)' : 'var(--dsw-alias-label-tertiary, #6b7280)',
+				color: hasCustom ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)',
 			};
-			// Selector pill (matches LanguageRow .selector: h36, r18, bg-module-platform)
-			var pillStyle = {
-				display: 'inline-flex', alignItems: 'center', gap: '6px',
-				height: '36px', padding: '0 14px', border: 'none', borderRadius: '18px',
-				background: 'var(--dsw-alias-bg-module-platform, #f5f6f7)',
-				font: 'inherit', fontSize: '14px', lineHeight: '22px',
-				color: 'var(--dsw-alias-label-primary, #e6e9ef)', cursor: 'pointer',
+			// 设置行操作按钮：对齐 DSH Button ghost（Button.module.css）——
+			//   h36 / r18 / pad 0 14 / gap 4 / 14-22 / transparent + hover interactive-bg-hover。
+			var buttonBase = {
+				display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+				border: 'none', borderRadius: '18px', cursor: 'pointer',
+				fontSize: '14px', lineHeight: '22px',
+				color: 'var(--dsw-alias-label-primary)',
+				background: 'transparent',
+				padding: '0 14px', height: '36px',
 				flexShrink: 0,
 			};
-			var ghostBtnStyle = {
-				display: 'inline-flex', alignItems: 'center',
-				height: '36px', padding: '0 12px', border: 'none', borderRadius: '18px',
-				background: 'transparent', font: 'inherit', fontSize: '13px',
-				color: 'var(--dsw-alias-label-tertiary, #6b7280)', cursor: 'pointer',
-				flexShrink: 0,
+			// 上传 label 复用 ghost 按钮视觉（hover 高亮）。
+			var UploadLabel = function(props) {
+				var hoverState = useState(false);
+				var hov = hoverState[0]; var setHov = hoverState[1];
+				return createElement('label', {
+					onMouseEnter: function() { setHov(true); },
+					onMouseLeave: function() { setHov(false); },
+					style: Object.assign({}, buttonBase, {
+						cursor: 'pointer',
+						background: hov ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
+					}),
+				}, props.children,
+					createElement('input', {
+						ref: fileRef, type: 'file',
+						accept: 'audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac',
+						style: { display: 'none' },
+						onChange: onFile,
+					}),
+				);
+			};
+			var GhostBtn = function(props) {
+				var hoverState = useState(false);
+				var hov = hoverState[0]; var setHov = hoverState[1];
+				return createElement('button', {
+					type: 'button', onClick: props.onClick,
+					onMouseEnter: function() { setHov(true); },
+					onMouseLeave: function() { setHov(false); },
+					style: Object.assign({}, buttonBase, {
+						background: hov ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
+						color: props.danger ? 'var(--dsw-alias-state-warn-primary)' : buttonBase.color,
+					}),
+				}, props.children);
 			};
 
 			return createElement('div', { style: rowStyle },
@@ -438,26 +467,12 @@ window.__ModuleLoader__.load({
 					createElement('div', { style: titleStyle }, T.soundLabel),
 					createElement('div', { style: subtitleStyle }, hasCustom ? T.custom : T.default),
 				),
-				// Upload button (styled as selector pill)
-				createElement('label', {
-					style: Object.assign({}, pillStyle, { cursor: 'pointer' }),
-				}, T.upload,
-					createElement('input', {
-						ref: fileRef, type: 'file',
-						accept: 'audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac',
-						style: { display: 'none' },
-						onChange: onFile,
-					}),
-				),
-				// Test button (ghost style)
-				createElement('button', {
-					style: ghostBtnStyle, onClick: onTest,
-				}, T.test),
-				// Reset button (only when custom is set)
-				hasCustom ? createElement('button', {
-					style: Object.assign({}, ghostBtnStyle, { color: 'var(--dsw-alias-state-warn-primary, #e0a03c)' }),
-					onClick: onRemove,
-				}, T.remove) : null,
+				// Upload button（ghost 视觉，label 包 file input）
+				createElement(UploadLabel, {}, T.upload),
+				// Test button（ghost）
+				createElement(GhostBtn, { onClick: onTest }, T.test),
+				// Reset button（ghost，warn 色；仅自定义时有）
+				hasCustom ? createElement(GhostBtn, { onClick: onRemove, danger: true }, T.remove) : null,
 			);
 		}
 

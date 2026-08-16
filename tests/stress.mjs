@@ -514,6 +514,41 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   }
 }
 
+// ── H. 全项目 UI 语言统一（对照 docs/design-language.md + DSH 权威组件）──
+// 统一原则：
+//  - 会话头操作按钮 = JobListAction.trigger（min-h 28 / r6 / 12-18 /
+//    label-tertiary → hover secondary）
+//  - 设置行操作按钮 = DSH Button ghost（h36 / r18 / pad 0 14 / gap 4 /
+//    14-22 / transparent + hover interactive-bg-hover）
+//  - 设置行 = LanguageRow row（pad 16 0 / border-bottom l2 / title 14-22）
+//  - 侧栏底部按钮 = Settings trigger 整行（已由 G 节覆盖）
+console.log('\n── H. 全项目 UI 语言统一 ──')
+{
+  const tabsCode = readFileSync(join(PROJECT, 'client/ui-session-tabs/lib/client.js'), 'utf8')
+  const notifyCode = readFileSync(join(PROJECT, 'client/ui-notify/lib/client.js'), 'utf8')
+
+  // ── OpenTabAction（会话头操作按钮）──
+  check('OpenTabAction min-h 28 / r6', /minHeight: '28px'/.test(tabsCode) && /borderRadius: '6px'/.test(tabsCode), '对齐 JobListAction.trigger')
+  check('OpenTabAction 12-18 字号行高', /fontSize: '12px'/.test(tabsCode) && /lineHeight: '18px'/.test(tabsCode))
+  check('OpenTabAction label-tertiary → hover secondary', /--dsw-alias-label-tertiary/.test(tabsCode) && /--dsw-alias-label-secondary/.test(tabsCode))
+  check('OpenTabAction 不用 14px（统一 12px）', !/fontSize: '14px', padding: '2px 6px'/.test(tabsCode), '旧的怪异尺寸必须移除')
+
+  // ── SoundSettings（设置行 + ghost 按钮）──
+  check('SoundSettings 行对齐 LanguageRow（pad 16 0 / border l2）', /padding: '16px 0'/.test(notifyCode) && /--dsw-alias-border-l2/.test(notifyCode))
+  check('SoundSettings 标题 14-22 label-primary', /fontSize: '14px', fontWeight: 400, lineHeight: '22px'/.test(notifyCode) && /--dsw-alias-label-primary/.test(notifyCode))
+  check('SoundSettings 按钮 h36 / r18 / pad 0 14 / gap 4', /height: '36px'/.test(notifyCode) && /borderRadius: '18px'/.test(notifyCode) && /padding: '0 14px'/.test(notifyCode) && /gap: '4px'/.test(notifyCode))
+  check('SoundSettings 按钮 14-22 字号', /fontSize: '14px', lineHeight: '22px'/.test(notifyCode))
+  check('SoundSettings 按钮 transparent + hover interactive-bg-hover', /background: 'transparent'/.test(notifyCode) && /--dsw-alias-interactive-bg-hover/.test(notifyCode))
+  check('SoundSettings 不用旧 pill（gap 6 / bg-module-platform 底）', !/gap: '6px'/.test(notifyCode) && !/background: 'var\(--dsw-alias-bg-module-platform/.test(notifyCode), '按钮不是 selector pill')
+  check('SoundSettings 不用 13px 旧尺寸', !/fontSize: '13px'/.test(notifyCode), '统一 14px')
+  // 上传 / 试听 / 重置都是同一按钮语言
+  check('上传按钮复用 ghost 语言（label）', /UploadLabel/.test(notifyCode) && /background: hov \? 'var\(--dsw-alias-interactive-bg-hover\)'/.test(notifyCode))
+  check('试听/重置复用 ghost 语言（button）', /GhostBtn/.test(notifyCode))
+  check('重置按钮 warn 色', /--dsw-alias-state-warn-primary/.test(notifyCode))
+  // 文件输入隐藏
+  check('文件输入隐藏', /style: \{ display: 'none' \}/.test(notifyCode))
+}
+
 console.log(failures === 0 ? `\n压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)
 rmSync(TMP, { recursive: true, force: true })
 process.exit(failures === 0 ? 0 : 1)

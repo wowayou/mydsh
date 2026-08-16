@@ -61,10 +61,14 @@ window.__ModuleLoader__.load({
 		}
 
 		// "Open in new tab" button for the session header action row.
+		// 对齐 JobListAction.trigger（会话头操作按钮权威形态）：
+		//   min-h 28 / r6 / transparent / 12-18 / label-tertiary → hover secondary。
 		function OpenTabAction(props) {
 			var sessionId = props.sessionId;
 			var state = useState(false);
 			var copied = state[0]; var setCopied = state[1];
+			var hoverState = useState(false);
+			var isHovered = hoverState[0]; var setHovered = hoverState[1];
 			var timer = useRef(undefined);
 
 			useEffect(function() { return function() {
@@ -84,13 +88,24 @@ window.__ModuleLoader__.load({
 				timer.current = setTimeout(function() { setCopied(false); }, 1500);
 			}, [sessionId]);
 
+			var color = copied
+				? 'var(--dsw-alias-state-success-primary)'
+				: isHovered
+					? 'var(--dsw-alias-label-secondary)'
+					: 'var(--dsw-alias-label-tertiary)';
+
 			return createElement('button', {
 				title: T.openTab,
 				onClick: onClick,
+				onMouseEnter: function() { setHovered(true); },
+				onMouseLeave: function() { setHovered(false); },
 				style: {
+					display: 'inline-flex', alignItems: 'center', gap: '3px',
+					minHeight: '28px', padding: '3px 2px',
 					background: 'transparent', border: 'none', cursor: 'pointer',
-					color: copied ? 'var(--dsw-alias-state-success-primary, #3fae6a)' : 'var(--dsw-alias-label-secondary, #9aa3b2)',
-					fontSize: '14px', padding: '2px 6px', borderRadius: 6, lineHeight: 1,
+					borderRadius: '6px', lineHeight: '18px',
+					fontSize: '12px', font: 'inherit',
+					color: color,
 				},
 			}, copied ? T.copied : '⧉');
 		}

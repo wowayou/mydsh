@@ -615,3 +615,33 @@ LanguageRow（设置 General 的语言行）标准模式：
 - stress G 节断言重写（底纹 calc(100%+8px)/负 margin/transparent hover/
   max-height/overscroll/行 44/r10）
 - 全绿：stress 91/91、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 全项目 UI 统一
+
+### 用户反馈
+「整个项目的UI统一一下」
+
+### 盘点
+活跃 UI 组件 3 处，发现不一致：
+1. ui-session-tabs OpenTabAction（会话头按钮）：
+   14px/r6/lineHeight 1/无 hover —— 应对齐 JobListAction.trigger
+   （min-h 28/r6/12-18/tertiary→secondary hover）
+2. ui-notify SoundSettings：
+   - 上传按钮用了 selector pill 语言（gap 6/bg-module-platform 底）——
+     设置行操作按钮应是 Button ghost（gap 4/transparent+hover）
+   - ghost 按钮 13px/pad 0 12 —— 应 14px/pad 0 14
+   - 所有按钮无 hover 反馈
+3. ui-annotate 是仓库残留（已不在 manifest 部署），非活跃 UI
+
+### 修正
+1. OpenTabAction → JobListAction.trigger 语言（React state hover）
+2. SoundSettings → DSH Button ghost 语言：
+   - buttonBase: h36/r18/pad 0 14/gap 4/14-22/transparent
+   - UploadLabel/GhostBtn 两个组件复用同一语言，hover interactive-bg-hover
+   - 重置按钮 warn 色
+3. design-language.md 补第 10/11/12 节（会话头按钮/通用按钮/统一原则表）
+
+### 测试
+- stress 新增 H 节（15 项统一断言）：OpenTabAction trigger 语言、
+  SoundSettings ghost 按钮语言、负向断言（不用旧 pill/13px/14px 怪异尺寸）
+- 全绿：stress 106/106、smoke 35/35、check-preset 41/41

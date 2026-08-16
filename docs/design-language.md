@@ -158,3 +158,46 @@ hover 底纹超出 padding 贴满侧栏宽度。
 - 内容区: `min-height: 0; overflow-y: auto; overscroll-behavior: contain`
 - header 紧凑（pad 18 14 8 24），描述 13-20 用 label-secondary（次级强调）
 - 列表行收敛 min-h 44 / r10 / pad 10 12——不局促也不臃肿
+
+## 10. 会话头操作按钮（JobListAction.trigger 权威形态）
+
+`conversation.session.header.actions` 里的操作按钮：
+
+```
+min-height: 28px; padding: 3px 2px; gap: 3px;
+border: 0; border-radius: 6px; background: transparent;
+font-size: 12px; line-height: 18px;
+color: var(--dsw-alias-label-tertiary);
+hover / focus-visible: color: var(--dsw-alias-label-secondary);
+```
+
+## 11. 通用按钮（Button 组件，figma Button）
+
+```
+.button: display inline-flex; align-items center; justify-content center;
+  gap: 4px; border: none; border-radius: 18px;
+  font-size: 14px; line-height: 22px; padding: 0 14px;
+.md: height: 36px;
+.sm: height: 28px; font-size: 12px; line-height: 18px;
+     padding: 0 10px; border-radius: 14px;
+variant:
+  primary: bg var(--dsw-alias-button-primary-fill); color label-primary-foreground;
+           hover: button-primary-hover
+  ghost: transparent; hover: interactive-bg-hover; active: interactive-bg-active
+  outline: border 1px border-l2; hover: interactive-bg-hover
+  toolbar: bg button-tool-bar-fill; hover: button-tool-bar-hover
+```
+
+设置行里的操作按钮（上传/试听/重置）用 **ghost**（不是 selector pill）；
+danger 语义用 `--dsw-alias-state-warn-primary`。
+
+## 12. 统一原则（全项目）
+
+| 元素 | 语言 |
+|---|---|
+| 会话头操作 | JobListAction.trigger（28/r6/12-18/tertiary→secondary） |
+| 设置行 | LanguageRow row（pad 16 0 / border-l2 / title 14-22） |
+| 设置行操作 | Button ghost（36/r18/pad 0 14/14-22/hover） |
+| 侧栏底部 | Settings trigger 整行（calc(100%+8px)/34/r12/transparent hover） |
+| 浮层 | Menu 卡片（218+/4px pad/r12/specific-menu/border-inverted/lv3） |
+| 居中弹窗 | Modal（380/r24/layer-2/max-height 100vh-48/内容滚动） |
