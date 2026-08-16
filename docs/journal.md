@@ -554,3 +554,37 @@ LanguageRow（设置 General 的语言行）标准模式：
 - stress G 节视觉断言重写为 selector pill 形态（36px/18px/bg-module-platform/
   pad 0 14/chevron/check/recentWorkspaceId/文案断言）
 - 全绿：stress 88/88、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 「新建会话」弹窗改为屏幕居中 Modal
+
+### 用户反馈（澄清）
+「我的意思是 设置那种 屏幕中间的弹窗面板，现在还是太局促了；
+而且鼠标移动过来之后的底纹也不够优雅」
+
+之前理解成 LanguageRow 的下拉 selector，实际用户要的是**设置面板那种
+屏幕居中的 Modal**。侧栏旁的小下拉确实局促。
+
+### 调研
+读 Modal.module.css + SettingsRoot.module.css：
+- Modal 规范：fixed 居中 / mask bg-mask-1 + blur / r24 / layer-2 底 /
+  inverted 描边 / shadow-lv3 / 宽 380 / header 16-24 wt500 / close 28 r8
+- 需要 createPortal 渲染到 body（react-dom，bundle 新增依赖）
+
+### 实现（完全复刻 Modal.module.css）
+1. 按钮保持 selector pill（用户没抱怨按钮），但去掉 chevron（Modal 不需要箭头）
+2. 点击 → createPortal 到 body 的居中 Modal：
+   - mask: bg-mask-1 + backdrop-filter blur（优雅模糊遮罩）
+   - dialog: r24 / layer-2 / inverted / shadow-lv3 / 宽 380
+   - header: 「新建会话」16-24 wt500 + 关闭按钮
+   - description: 「选择目标工作区，将在新标签页打开。」
+   - body: 工作区行——宽松两行（title + path）min-h 56 / r12 / pad 12 14
+3. hover 底纹：--dsw-alias-interactive-bg-hover 整行圆角（半透明白，优雅），
+   每行独立 state 过渡
+4. 选中项 ✓ + 「最近使用」角标（recentWorkspaceId）
+5. Escape / 遮罩点击关闭
+
+### 测试
+- stress G 节断言重写为 Modal 形态（fixed inset 0 / createPortal / mask blur /
+  r24 / layer-2 / 宽 380 / 行 min-h 56 / hover 底纹 / Escape / 遮罩关闭 / 文案）
+- react-dom 加入 smoke/stress 的 requireFn
+- 全绿：stress 91/91、smoke 35/35、check-preset 41/41

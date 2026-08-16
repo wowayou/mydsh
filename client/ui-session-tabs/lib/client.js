@@ -18,6 +18,7 @@ window.__ModuleLoader__.load({
 		var module = { exports: {} };
 		var exports = module.exports;
 		const React = require('react');
+		const ReactDOM = require('react-dom');
 		const { useState, useEffect, useMemo, useRef, useCallback, createElement } = React;
 
 		function isZh() {
@@ -26,16 +27,16 @@ window.__ModuleLoader__.load({
 		var T = isZh()
 			? { openTab: '在新标签页打开本会话（链接已复制）', copied: '✓',
 			    newTabLabel: '新建会话', newTab: '新建会话',
-			    workspacePick: '新建会话到哪个工作区？',
+			    modalTitle: '新建会话', modalDesc: '选择目标工作区，将在新标签页打开。',
 			    workspacePickAria: '新建会话：选择目标工作区（将打开新标签页）',
 			    noWorkspace: '暂无工作区',
-			    recentHint: '最近使用' }
+			    recentHint: '最近使用', close: '关闭' }
 			: { openTab: 'Open this session in a new tab (link copied)', copied: '✓',
 			    newTabLabel: 'New session', newTab: 'New session',
-			    workspacePick: 'New session in which workspace?',
+			    modalTitle: 'New session', modalDesc: 'Choose a workspace; it opens in a new tab.',
 			    workspacePickAria: 'New session: choose a workspace (opens a new tab)',
 			    noWorkspace: 'No workspace yet',
-			    recentHint: 'Recent' };
+			    recentHint: 'Recent', close: 'Close' };
 
 		function deepLink(sessionId) {
 			try {
@@ -133,18 +134,6 @@ window.__ModuleLoader__.load({
 			}, createElement('path', { transform: 'translate(1.5 2.429)', d: FOLDER_ICON_PATH, fill: 'currentColor' }));
 		}
 
-		// DSH 同款 ic_ds_chevron_down_outline_14（selector pill 下拉箭头）。
-		var CHEVRON_PATH =
-			'M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z';
-
-		function ChevronIcon() {
-			return createElement('svg', {
-				width: 14, height: 14, viewBox: '0 0 14 14',
-				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
-				'aria-hidden': true, style: { flexShrink: 0 },
-			}, createElement('path', { d: CHEVRON_PATH, fill: 'currentColor' }));
-		}
-
 		// DSH 同款 ic_ds_check_outline_16（菜单选中项 trailing check）。
 		var CHECK_PATH =
 			'M15.0498 3.92579L8.49512 12.3818C8.25774 12.6881 8.04517 12.9645 7.84668 13.1689C7.63957 13.3823 7.38732 13.5841 7.04492 13.6719C6.86373 13.7183 6.6757 13.7346 6.48926 13.7197C6.13666 13.6915 5.8528 13.5355 5.6123 13.3604C5.38201 13.1926 5.12573 12.9567 4.83984 12.6953L1.03125 9.21289L1.96875 8.1875L5.77734 11.6699C6.08684 11.9529 6.27773 12.1249 6.43066 12.2363C6.50183 12.2882 6.54699 12.3135 6.57324 12.3252C6.58525 12.3305 6.59269 12.3322 6.5957 12.333C6.59802 12.3336 6.59961 12.334 6.59961 12.334C6.63317 12.3367 6.66758 12.3335 6.7002 12.3252C6.7002 12.3252 6.70211 12.3251 6.7041 12.3242C6.70698 12.3229 6.71348 12.319 6.72461 12.3115C6.74849 12.2956 6.78843 12.2642 6.84961 12.2012C6.98138 12.0654 7.13957 11.8628 7.39648 11.5313L13.9502 3.07422L15.0498 3.92579Z';
@@ -155,6 +144,18 @@ window.__ModuleLoader__.load({
 				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
 				'aria-hidden': true, style: { flexShrink: 0 },
 			}, createElement('path', { d: CHECK_PATH, fill: 'currentColor' }));
+		}
+
+		// DSH 同款 ic_ds_close_outline_16（Modal 关闭按钮）。
+		var CLOSE_PATH =
+			'M14.1168 13.197L13.197 14.1167L1.8833 2.80303L2.80309 1.88324L14.1168 13.197ZM13.197 1.88326L14.1168 2.80305L2.80309 14.1168L1.8833 13.197L13.197 1.88326Z';
+
+		function CloseIcon() {
+			return createElement('svg', {
+				width: 14, height: 14, viewBox: '0 0 16 16',
+				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+				'aria-hidden': true,
+			}, createElement('path', { d: CLOSE_PATH, fill: 'currentColor' }));
 		}
 
 		// ── workspace 选择纯逻辑（可测） ─────────────────────────────────
@@ -212,11 +213,10 @@ window.__ModuleLoader__.load({
 			var workspaces = props.workspaces;
 			var hovered = useState(false);
 			var isHovered = hovered[0]; var setHovered = hovered[1];
-			var menuOpen = useState(false);
-			var isOpen = menuOpen[0]; var setOpen = menuOpen[1];
-			var anchorRef = useRef(null);
+			var openState = useState(false);
+			var isOpen = openState[0]; var setOpen = openState[1];
 
-			// 选择框内容：workspace 列表快照 + 最近使用的工作区（默认选中标记）。
+			// 弹窗内容：workspace 列表快照 + 最近使用的工作区（默认选中标记）。
 			var recentId = null;
 			var choices = [];
 			if (isOpen && workspaces && workspaces.list) {
@@ -241,29 +241,19 @@ window.__ModuleLoader__.load({
 				setOpen(function(v) { return !v; });
 			}, [workspaces]);
 
-			// 点击外部关闭 + Escape 关闭：全局监听（挂载时注册，对齐 Menu.tsx）。
+			// Escape 关闭（对齐 Modal.tsx：监听挂载在 open 期间）。
 			useEffect(function() {
 				if (!isOpen) return;
-				var onDown = function(e) {
-					try {
-						if (anchorRef.current && anchorRef.current.contains(e.target)) return;
-						setOpen(false);
-					} catch {}
-				};
 				var onKey = function(e) {
 					try { if (e.key === 'Escape') setOpen(false); } catch {}
 				};
-				try { document.addEventListener('pointerdown', onDown); } catch {}
 				try { document.addEventListener('keydown', onKey); } catch {}
-				return function() {
-					try { document.removeEventListener('pointerdown', onDown); } catch {}
-					try { document.removeEventListener('keydown', onKey); } catch {}
-				};
+				return function() { try { document.removeEventListener('keydown', onKey); } catch {} };
 			}, [isOpen]);
 
-			// 按钮：设置选中弹窗形态（LanguageRow selector pill）——
-			//   h36 / r18 / bg-module-platform / pad 0 14 / gap 12 / 文字 + chevron。
-			//   rail 折叠：36px 圆形只留文件夹图标（对齐 .trigger.rail）。
+			// 按钮：selector pill（LanguageRow .selector 语言）。
+			//   h36 / r18 / bg-module-platform / pad 0 14 / gap 12。
+			//   rail 折叠：36px 圆形只留文件夹图标。
 			var baseStyle = {
 				flex: 'none',
 				display: 'inline-flex', alignItems: 'center', gap: '12px',
@@ -281,86 +271,160 @@ window.__ModuleLoader__.load({
 				color: 'var(--dsw-alias-label-primary)',
 				font: 'inherit', fontSize: '14px', lineHeight: '22px',
 			};
-			// 浮层卡片：完全复刻 Menu.module.css .list（向上开：bottom 4px gap）。
-			var menuStyle = {
-				position: 'absolute',
-				bottom: 'calc(100% + 4px)',
-				left: wide ? 0 : '50%',
-				transform: wide ? undefined : 'translateX(-50%)',
-				boxSizing: 'border-box',
-				padding: '4px',
-				display: 'flex', flexDirection: 'column',
-				border: '1px solid var(--dsw-alias-border-inverted)',
-				borderRadius: '12px',
-				background: 'var(--dsw-specific-menu)',
-				boxShadow: 'var(--dsw-shadow-lv3)',
-				minWidth: '218px', maxWidth: '360px',
-				maxHeight: 'calc(100vh - 24px)', overflowY: 'auto',
-				zIndex: 100,
+
+			// ── Modal（完全复刻 Modal.module.css）────────────────────────
+			// .root: fixed inset 0 / z-1000 / flex 居中 / pad 24
+			// .mask: --dsw-alias-bg-mask-1 + backdrop-filter var(--dsw-mask-blur)
+			// .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380 / gap 20
+			// .header: pad 22 14 12 24 / title 16-24 wt500 / close 28px r8 hover
+			// .description: 14-22 / pad 0 24
+			// .body: pad 0 24 / margin-top 20
+			var modalRootStyle = {
+				position: 'fixed', inset: '0', zIndex: 1000,
+				display: 'flex', alignItems: 'center', justifyContent: 'center',
+				padding: '24px',
 			};
-			// 头部：复刻 Menu.module.css .label。
+			var maskStyle = {
+				position: 'absolute', inset: '0',
+				background: 'var(--dsw-alias-bg-mask-1)',
+				backdropFilter: 'var(--dsw-mask-blur)',
+			};
+			var dialogStyle = {
+				position: 'relative', zIndex: 1,
+				display: 'flex', flexDirection: 'column', gap: '20px',
+				width: 'min(380px, 100%)',
+				padding: '0 0 24px',
+				overflow: 'hidden',
+				border: '1px solid var(--dsw-alias-border-inverted)',
+				borderRadius: '24px',
+				background: 'var(--dsw-alias-bg-layer-2)',
+				boxShadow: 'var(--dsw-shadow-lv3)',
+			};
 			var headerStyle = {
-				padding: '8px 10px', fontSize: '12px', lineHeight: '16px',
+				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+				gap: '8px', padding: '22px 14px 12px 24px',
+			};
+			var titleStyle = {
+				margin: '0', fontSize: '16px', lineHeight: '24px', fontWeight: 500,
+				color: 'var(--dsw-alias-label-primary)',
+			};
+			var closeBtnStyle = {
+				flex: 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+				width: '28px', height: '28px', border: 'none', borderRadius: '8px',
+				background: 'transparent', cursor: 'pointer',
+				color: 'var(--dsw-alias-label-secondary)',
+			};
+			var descStyle = {
+				margin: '0', padding: '0 24px',
+				fontSize: '14px', lineHeight: '22px', fontWeight: 400,
+				color: 'var(--dsw-alias-label-primary)',
+			};
+			var bodyStyle = {
+				display: 'flex', flexDirection: 'column', minWidth: '0',
+				marginTop: '20px', padding: '0 24px', gap: '4px',
+			};
+			// 工作区行：宽松两行布局（title + path），hover 整行圆角底纹。
+			// 底纹用 --dsw-alias-interactive-bg-hover（半透明白，暗色 rgba(255,255,255,0.08)），
+			// 行 r12、pad 12 14，与设置面板的列表行同语言。
+			var rowStyle = {
+				display: 'flex', alignItems: 'center', gap: '12px',
+				width: '100%', minHeight: '56px',
+				padding: '12px 14px',
+				border: 'none', borderRadius: '12px',
+				background: 'transparent', cursor: 'pointer',
+				textAlign: 'left', font: 'inherit',
+			};
+			var rowTextStyle = {
+				flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '2px',
+			};
+			var rowTitleStyle = {
+				fontSize: '14px', lineHeight: '22px', fontWeight: 500,
+				color: 'var(--dsw-alias-label-primary)',
+				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+			};
+			var rowPathStyle = {
+				fontSize: '12px', lineHeight: '18px',
 				color: 'var(--dsw-alias-label-tertiary)',
 				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
 			};
-			// 菜单项：复刻 Menu.module.css .item（单行 icon + label + trailing check）。
-			var itemStyle = {
-				display: 'flex', alignItems: 'center', gap: '8px',
-				width: '100%', minHeight: '40px',
-				padding: '8px 10px',
-				border: 'none', borderRadius: '10px',
-				background: 'transparent', cursor: 'pointer',
-				fontSize: '14px', lineHeight: '22px',
-				color: 'var(--dsw-alias-label-primary)', textAlign: 'left',
-			};
-			// 图标槽：复刻 .itemIcon。
-			var itemIconStyle = {
+			var rowIconStyle = {
 				display: 'inline-flex', flex: 'none',
-				width: '16px', height: '16px',
+				width: '20px', height: '20px',
 				alignItems: 'center', justifyContent: 'center',
+				color: 'var(--dsw-alias-label-secondary)',
+			};
+			var checkWrapStyle = {
+				flex: 'none', display: 'inline-flex',
+				color: 'var(--dsw-alias-label-primary)',
+			};
+			// 最近使用角标（选中行）：小号 tertiary 文字。
+			var recentBadgeStyle = {
+				flex: 'none', fontSize: '12px', lineHeight: '18px',
 				color: 'var(--dsw-alias-label-tertiary)',
 			};
-			// label 槽：复刻 .itemLabel。
-			var itemLabelStyle = {
-				flex: '1', minWidth: '0',
-				overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-			};
-			// trailing check：复刻 Menu .check（label-primary）。
-			var checkStyle = {
-				flex: 'none', color: 'var(--dsw-alias-label-primary)',
+
+			// hover 底纹：每行独立 state（优雅的过渡，用 onMouseEnter/Leave）。
+			var Row = function(rowProps) {
+				var hState = useState(false);
+				var rowHovered = hState[0]; var setRowHovered = hState[1];
+				var c = rowProps.choice;
+				var isSelected = c.id === rowProps.recentId;
+				return createElement('button', {
+					type: 'button', key: c.id,
+					onClick: function() { onPick(c.id); },
+					onMouseEnter: function() { setRowHovered(true); },
+					onMouseLeave: function() { setRowHovered(false); },
+					'aria-pressed': isSelected || undefined,
+					style: Object.assign({}, rowStyle, {
+						background: rowHovered ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
+					}),
+				},
+					createElement('span', { style: rowIconStyle },
+						createElement(FolderIcon, {})),
+					createElement('span', { style: rowTextStyle },
+						createElement('span', { style: rowTitleStyle }, c.title),
+						createElement('span', { style: rowPathStyle }, c.path)),
+					isSelected ? createElement('span', { style: checkWrapStyle },
+						createElement(CheckIcon, {})) : null,
+					isSelected && rowProps.recentId === c.id
+						? createElement('span', { style: recentBadgeStyle }, T.recentHint) : null);
 			};
 
-			return createElement('span', { style: { position: 'relative', display: 'inline-flex' }, ref: anchorRef },
+			// 按钮 + 模态（createPortal 到 body，复刻 Modal.tsx）。
+			return createElement(React.Fragment, null,
 				createElement('button', {
 					type: 'button',
 					onClick: onToggle,
 					onMouseEnter: function() { setHovered(true); },
 					onMouseLeave: function() { setHovered(false); },
 					'aria-label': T.workspacePickAria, title: T.workspacePickAria,
-					'aria-haspopup': 'menu', 'aria-expanded': isOpen || undefined,
+					'aria-haspopup': 'dialog', 'aria-expanded': isOpen || undefined,
 					style: baseStyle,
 				}, createElement(FolderIcon, {}),
-					wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, T.newTab) : null,
-					wide ? createElement(ChevronIcon, {}) : null),
-				isOpen ? createElement('div', {
-					role: 'menu', style: menuStyle,
-				},
-					createElement('div', { style: headerStyle, role: 'presentation' }, T.workspacePick),
-					choices.map(function(c) {
-						var isSelected = c.id === recentId;
-						return createElement('button', {
-							type: 'button', role: 'menuitem', key: c.id,
-							onClick: function() { onPick(c.id); },
-							'aria-checked': isSelected || undefined,
-							style: itemStyle,
+					wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, T.newTab) : null),
+				isOpen ? ReactDOM.createPortal(
+					createElement('div', { style: modalRootStyle, role: 'presentation' },
+						createElement('div', { style: maskStyle, 'aria-hidden': true, onClick: function() { setOpen(false); } }),
+						createElement('div', {
+							style: dialogStyle, role: 'dialog', 'aria-modal': true,
+							'aria-label': T.modalTitle,
 						},
-							createElement('span', { style: itemIconStyle },
-								createElement(FolderIcon, {})),
-							createElement('span', { style: itemLabelStyle, title: c.path }, c.title),
-							isSelected ? createElement('span', { style: checkStyle },
-								createElement(CheckIcon, {})) : null);
-					}),
+							createElement('div', { style: headerStyle },
+								createElement('h2', { style: titleStyle }, T.modalTitle),
+								createElement('button', {
+									type: 'button', style: closeBtnStyle,
+									'aria-label': T.close,
+									onClick: function() { setOpen(false); },
+								}, createElement(CloseIcon, {}))),
+							createElement('p', { style: descStyle }, T.modalDesc),
+							createElement('div', { style: bodyStyle },
+								choices.map(function(c) {
+									return createElement(Row, { key: c.id, choice: c, recentId: recentId });
+								}),
+							),
+						),
+					),
+					typeof document !== 'undefined' ? document.body : null,
 				) : null,
 			);
 		}

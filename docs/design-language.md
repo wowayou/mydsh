@@ -89,3 +89,45 @@ hover: var(--dsw-alias-button-floating-hover)
 5. 侧栏 footer 按钮对齐 Settings trigger 的 34px/12px 语言
 6. 菜单向上/向下开都保持 4px gap（`bottom: calc(100% + 4px)` / `top: calc(100% + 4px)`）
 7. 手写 bundle 无 CSS Modules：hover 用 React state 模拟，但**值必须用上面的令牌**
+
+## 6. 屏幕居中 Modal（Modal.module.css，figma Mask+Dialog 451:18655）
+
+```
+.root: position: fixed; inset: 0; z-index: 1000;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+.mask: position: absolute; inset: 0;
+  background: var(--dsw-alias-bg-mask-1);          ← 暗色 rgba(0,0,0,0.5)
+  backdrop-filter: var(--dsw-mask-blur);           ← blur(2px) 优雅模糊
+.dialog: position: relative; z-index: 1;
+  display: flex; flex-direction: column; gap: 20px;
+  width: min(380px, 100%); padding: 0 0 24px; overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 24px;                             ← r24（比菜单 r12 大一档）
+  background: var(--dsw-alias-bg-layer-2);         ← 面板底（比菜单高一层）
+  box-shadow: var(--dsw-shadow-lv3);
+.header: display:flex; justify-content: space-between; gap:8px;
+  padding: 22px 14px 12px 24px;
+  title: 16px/24px, font-weight: 500, label-primary
+  close: 28x28, r8, transparent, label-secondary; hover: interactive-bg-hover
+.description: 14/22, pad 0 24, label-primary
+.body: display:flex; flex-direction:column; min-width:0;
+  margin-top: 20px; padding: 0 24px;
+.footer: flex; justify-content: flex-end; gap:8px; padding: 0 24px;
+```
+
+⚠️ 需要 `createPortal`（react-dom）渲染到 body，避免祖先 overflow/stacking 裁剪。
+手写 bundle：`const ReactDOM = require('react-dom')`。
+
+## 7. 弹窗内列表行（宽松 + 优雅 hover）
+
+弹窗面板里的可选项行（如工作区列表）不该用紧凑菜单项（min-h 40），
+用宽松面板行：
+
+```
+min-height: 56px; padding: 12px 14px; border-radius: 12px;
+两行布局: title(14/22 wt500 label-primary) + path(12/18 label-tertiary)
+leading 图标 20x20 label-secondary
+hover 底纹: background: var(--dsw-alias-interactive-bg-hover)
+           （暗色 rgba(255,255,255,0.08)，半透明优雅过渡）
+选中: trailing check 16px label-primary + 可选「最近使用」角标 12/18 label-tertiary
+```

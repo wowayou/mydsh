@@ -364,7 +364,8 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   const code = readFileSync(join(PROJECT, 'client/ui-session-tabs/lib/client.js'), 'utf8')
   const location = { href: '', search: '' }
   const setGlobal = (name, value) => { try { Object.defineProperty(globalThis, name, { value, configurable: true, writable: true }) } catch {} }
-  function requireFn(id) { if (id === 'react') return REACT; throw new Error(`bundle require: ${id}`) }
+  const REACT_DOM = require(join(PROFILE_NM, 'react-dom'))
+  function requireFn(id) { if (id === 'react') return REACT; if (id === 'react-dom') return REACT_DOM; throw new Error(`bundle require: ${id}`) }
   // 加载拿到 __test（deepLink/blankTabUrl 读 window.location.href，每次取最新值）
   const loadPlugin = () => {
     let captured = null
@@ -413,46 +414,50 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   check('注册 conversation.session.header.actions#mydsh-open-tab', ids.includes('mydsh-open-tab'))
   check('注册 conversation.input.dock#mydsh-url-session', ids.includes('mydsh-url-session'))
 
-  // 视觉调性：按钮 = 设置选中弹窗形态（LanguageRow selector pill）——
-  //   h36 / r18 / bg-module-platform / pad 0 14 / gap 12 / 文字 + chevron。
+  // 视觉调性：按钮 = selector pill（LanguageRow .selector）——
+  //   h36 / r18 / bg-module-platform / pad 0 14 / gap 12。
   //   折叠 rail：36px 圆形只留文件夹图标。
-  // 选择框浮层必须完全复刻 DSH Menu（Menu.module.css）：
-  //   卡片: --dsw-specific-menu 底 / --dsw-alias-border-inverted 描边 /
-  //         --dsw-shadow-lv3 / r12 / 4px pad / min-width 218
-  //   菜单项: min-h 40 / r10 / pad 8 10 / 14-22 / label-primary / hover /
-  //           单行 icon+label+trailing check
-  //   头部: 12-16 / label-tertiary / pad 8 10
-  //   4px gap（bottom: calc(100% + 4px)）
+  // 弹窗 = 屏幕居中 Modal（完全复刻 Modal.module.css）：
+  //   .root: fixed inset 0 / z-1000 / flex 居中 / pad 24
+  //   .mask: --dsw-alias-bg-mask-1 + backdrop-filter var(--dsw-mask-blur)
+  //   .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380 / gap 20
+  //   .header: pad 22 14 12 24 / title 16-24 wt500 / close 28px r8 hover
+  //   .description: 14-22 / pad 0 24
+  //   .body: pad 0 24 / margin-top 20
+  //   工作区行：宽松两行（title+path）min-h 56 / r12 / pad 12 14 / hover 整行底纹
   check('selector pill 对齐 36px 高', /height: (wide \? )?'36px'/.test(code), '高度应为 36px')
   check('selector pill 对齐 18px 圆角', /borderRadius: (wide \? )?'18px'/.test(code), '圆角应为 18px')
   check('selector pill 用 bg-module-platform', /--dsw-alias-bg-module-platform/.test(code))
   check('selector pill pad 0 14', /padding: (wide \? )?'0 14px'/.test(code))
-  check('selector pill 带 chevron', /CHEVRON_PATH/.test(code))
   check('按钮用 label-primary 色', /--dsw-alias-label-primary/.test(code))
   check('按钮 hover 用 interactive-bg-hover', /--dsw-alias-interactive-bg-hover/.test(code))
   check('rail 折叠对齐 36px 圆形', /borderRadius: (wide \? )?'18px' : '50%'/.test(code) && /width: (wide \? )?'auto' : '36px'/.test(code))
-  // 浮层卡片令牌（对照 docs/design-language.md）
-  check('菜单卡片用 --dsw-specific-menu 底', /background: 'var\(--dsw-specific-menu\)'/.test(code))
-  check('菜单卡片用 --dsw-alias-border-inverted 描边', /border: '1px solid var\(--dsw-alias-border-inverted\)'/.test(code))
-  check('菜单卡片用 --dsw-shadow-lv3 阴影', /boxShadow: 'var\(--dsw-shadow-lv3\)'/.test(code))
-  check('菜单卡片 4px pad + r12', /padding: '4px'/.test(code) && /borderRadius: '12px'/.test(code))
-  check('菜单卡片 min-width 218', /minWidth: '218px'/.test(code))
-  check('菜单 4px gap 向上开', /bottom: 'calc\(100% \+ 4px\)'/.test(code))
-  check('菜单不用 bg-overlay（模态遮罩）', !/--dsw-alias-bg-overlay/.test(code), '浮层不该用 bg-overlay')
-  // 菜单项令牌（复刻 .item / .itemIcon / .itemLabel / .check）
-  check('菜单项 min-h 40 / r10 / pad 8 10', /minHeight: '40px'/.test(code) && /borderRadius: '10px'/.test(code) && /padding: '8px 10px'/.test(code))
-  check('菜单项 14-22 行高', /fontSize: '14px'/.test(code) && /lineHeight: '22px'/.test(code))
-  check('菜单项 16px 图标槽 label-tertiary', /width: '16px', height: '16px'/.test(code) && /--dsw-alias-label-tertiary/.test(code))
-  check('菜单项 label 槽 ellipsis', /textOverflow: 'ellipsis'/.test(code))
-  check('菜单项用文件夹图标（workspace 语义）', /FOLDER_ICON_PATH/.test(code))
-  check('菜单选中项带 check 标记', /CHECK_PATH/.test(code) && /checkStyle/.test(code))
+  // Modal 结构（对照 Modal.module.css）
+  check('Modal 居中 fixed inset 0', /position: 'fixed', inset: '0', zIndex: 1000/.test(code))
+  check('Modal 用 createPortal 到 body', /createPortal/.test(code) && /document\.body/.test(code))
+  check('遮罩用 bg-mask-1 + blur', /--dsw-alias-bg-mask-1/.test(code) && /--dsw-mask-blur/.test(code))
+  check('对话框 r24 + layer-2 底', /borderRadius: '24px'/.test(code) && /--dsw-alias-bg-layer-2/.test(code))
+  check('对话框 inverted 描边 + shadow-lv3', /--dsw-alias-border-inverted/.test(code) && /--dsw-shadow-lv3/.test(code))
+  check('对话框宽 380（不局促）', /width: 'min\(380px, 100%\)'/.test(code))
+  check('标题 16-24 wt500', /fontSize: '16px', lineHeight: '24px', fontWeight: 500/.test(code))
+  check('关闭按钮 28px r8 hover', /width: '28px', height: '28px'/.test(code) && /borderRadius: '8px'/.test(code))
+  check('描述 14-22 pad 0 24', /fontSize: '14px', lineHeight: '22px'/.test(code) && /padding: '0 24px'/.test(code))
+  check('body pad 0 24 margin-top 20', /marginTop: '20px', padding: '0 24px'/.test(code))
+  // 工作区行（宽松 + 优雅 hover 底纹）
+  check('工作区行 min-h 56（宽松）', /minHeight: '56px'/.test(code))
+  check('工作区行 r12 pad 12 14', /borderRadius: '12px'/.test(code) && /padding: '12px 14px'/.test(code))
+  check('工作区行两行布局（title+path）', /flexDirection: 'column', gap: '2px'/.test(code))
+  check('hover 底纹用 interactive-bg-hover（优雅半透明）', /rowHovered \? 'var\(--dsw-alias-interactive-bg-hover\)' : 'transparent'/.test(code))
+  check('选中行带 check 标记', /CHECK_PATH/.test(code))
   check('选中项默认最近工作区 recentWorkspaceId', /recentWorkspaceId/.test(code))
-  check('头部 12-16 label-tertiary pad 8 10', /fontSize: '12px', lineHeight: '16px'/.test(code) && /padding: '8px 10px'/.test(code))
-  // 交互：Escape 关闭
-  check('Escape 关闭菜单', /e\.key === 'Escape'/.test(code))
+  check('最近使用角标', /recentHint/.test(code))
+  check('工作区行用文件夹图标', /FOLDER_ICON_PATH/.test(code))
+  // 交互：Escape / 遮罩点击关闭
+  check('Escape 关闭 Modal', /e\.key === 'Escape'/.test(code))
+  check('遮罩点击关闭', /maskStyle, 'aria-hidden': true, onClick/.test(code))
   // 文案明确性
-  check('按钮文案「新建会话」', /newTab: '新建会话'/.test(code))
-  check('菜单头部问句「新建会话到哪个工作区？」', /workspacePick: '新建会话到哪个工作区？'/.test(code))
+  check('Modal 标题「新建会话」', /modalTitle: '新建会话'/.test(code))
+  check('Modal 描述说明动作', /modalDesc/.test(code))
   check('aria-label 说明动作', /workspacePickAria/.test(code))
 
   // ── workspace 选择逻辑（openNewTabInWorkspace / workspaceChoices）──

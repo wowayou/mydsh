@@ -60,6 +60,7 @@ function loadClientBundle(file) {
 
   function requireFn(id) {
     if (id === 'react') return REACT
+    if (id === 'react-dom') return require(join(PROFILE_NM, 'react-dom'))
     throw new Error(`bundle require 了未提供模块: ${id}`)
   }
   // 用 vm 执行以隔离（globalThis 打桩已就绪）。
