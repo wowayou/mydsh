@@ -414,38 +414,42 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   check('注册 conversation.session.header.actions#mydsh-open-tab', ids.includes('mydsh-open-tab'))
   check('注册 conversation.input.dock#mydsh-url-session', ids.includes('mydsh-url-session'))
 
-  // 视觉调性：按钮 = selector pill（LanguageRow .selector）——
-  //   h36 / r18 / bg-module-platform / pad 0 14 / gap 12。
-  //   折叠 rail：36px 圆形只留文件夹图标。
-  // 弹窗 = 屏幕居中 Modal（完全复刻 Modal.module.css）：
+  // 视觉调性：按钮 = 整行 trigger（复刻 SettingsRoot.module.css .trigger）——
+  //   width: calc(100% + 8px) + margin 4px -4px，底纹超出侧栏 padding
+  //   基本占满侧栏宽度；h34 / r12 / transparent / pad 6 2 6 10 / gap 8。
+  //   折叠 rail：36px 圆形只留文件夹图标（.trigger.rail）。
+  // 弹窗 = 屏幕居中 Modal（复刻 Modal.module.css + RiskConfirmation 高度克制）：
   //   .root: fixed inset 0 / z-1000 / flex 居中 / pad 24
   //   .mask: --dsw-alias-bg-mask-1 + backdrop-filter var(--dsw-mask-blur)
-  //   .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380 / gap 20
-  //   .header: pad 22 14 12 24 / title 16-24 wt500 / close 28px r8 hover
-  //   .description: 14-22 / pad 0 24
-  //   .body: pad 0 24 / margin-top 20
-  //   工作区行：宽松两行（title+path）min-h 56 / r12 / pad 12 14 / hover 整行底纹
-  check('selector pill 对齐 36px 高', /height: (wide \? )?'36px'/.test(code), '高度应为 36px')
-  check('selector pill 对齐 18px 圆角', /borderRadius: (wide \? )?'18px'/.test(code), '圆角应为 18px')
-  check('selector pill 用 bg-module-platform', /--dsw-alias-bg-module-platform/.test(code))
-  check('selector pill pad 0 14', /padding: (wide \? )?'0 14px'/.test(code))
-  check('按钮用 label-primary 色', /--dsw-alias-label-primary/.test(code))
+  //   .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380
+  //     max-height: calc(100vh - 48px)，内容超高内部滚动（业界快速选择面板形态）
+  //   .header: pad 18 14 8 24 / title 16-24 wt500 / close 28px r8 hover
+  //   .description: 13-20 / pad 0 24 / label-secondary
+  //   .body: pad 4 16 0 / min-height 0 / overflow-y auto / overscroll contain
+  //   工作区行：两行（title+path）min-h 44 / r10 / pad 10 12 / hover 整行底纹
+  check('按钮底纹占满侧栏宽度 calc(100%+8px)', /width: (wide \? )?'calc\(100% \+ 8px\)' : '36px'/.test(code), '必须复刻 .trigger 的整行扩展')
+  check('按钮负 margin 抵消 padding', /margin: (wide \? )?'4px -4px 4px'/.test(code))
+  check('trigger 对齐 34px 高', /height: (wide \? )?'34px' : '36px'/.test(code))
+  check('trigger 对齐 12px 圆角', /borderRadius: (wide \? )?'12px' : '50%'/.test(code))
+  check('trigger pad 6 2 6 10', /padding: (wide \? )?'6px 2px 6px 10px'/.test(code))
+  check('按钮底纹 transparent（hover 才亮）', /background: (isHovered \|\| isOpen \? 'var\(--dsw-alias-interactive-bg-hover\)' : 'transparent')/.test(code))
   check('按钮 hover 用 interactive-bg-hover', /--dsw-alias-interactive-bg-hover/.test(code))
-  check('rail 折叠对齐 36px 圆形', /borderRadius: (wide \? )?'18px' : '50%'/.test(code) && /width: (wide \? )?'auto' : '36px'/.test(code))
-  // Modal 结构（对照 Modal.module.css）
+  check('rail 折叠对齐 36px 圆形', /borderRadius: (wide \? )?'12px' : '50%'/.test(code) && /width: (wide \? )?'calc\(100% \+ 8px\)' : '36px'/.test(code))
+  // Modal 结构（对照 Modal.module.css + RiskConfirmation）
   check('Modal 居中 fixed inset 0', /position: 'fixed', inset: '0', zIndex: 1000/.test(code))
   check('Modal 用 createPortal 到 body', /createPortal/.test(code) && /document\.body/.test(code))
   check('遮罩用 bg-mask-1 + blur', /--dsw-alias-bg-mask-1/.test(code) && /--dsw-mask-blur/.test(code))
   check('对话框 r24 + layer-2 底', /borderRadius: '24px'/.test(code) && /--dsw-alias-bg-layer-2/.test(code))
   check('对话框 inverted 描边 + shadow-lv3', /--dsw-alias-border-inverted/.test(code) && /--dsw-shadow-lv3/.test(code))
   check('对话框宽 380（不局促）', /width: 'min\(380px, 100%\)'/.test(code))
+  check('对话框 max-height 克制 + 超高滚动', /maxHeight: 'calc\(100vh - 48px\)'/.test(code) && /overflowY: 'auto'/.test(code))
+  check('内容区 overscroll contain', /overscrollBehavior: 'contain'/.test(code))
   check('标题 16-24 wt500', /fontSize: '16px', lineHeight: '24px', fontWeight: 500/.test(code))
   check('关闭按钮 28px r8 hover', /width: '28px', height: '28px'/.test(code) && /borderRadius: '8px'/.test(code))
-  check('描述 14-22 pad 0 24', /fontSize: '14px', lineHeight: '22px'/.test(code) && /padding: '0 24px'/.test(code))
-  check('body pad 0 24 margin-top 20', /marginTop: '20px', padding: '0 24px'/.test(code))
-  // 工作区行（宽松 + 优雅 hover 底纹）
-  check('工作区行 min-h 56（宽松）', /minHeight: '56px'/.test(code))
-  check('工作区行 r12 pad 12 14', /borderRadius: '12px'/.test(code) && /padding: '12px 14px'/.test(code))
+  check('描述 13-20 label-secondary（次级强调）', /fontSize: '13px', lineHeight: '20px'/.test(code) && /--dsw-alias-label-secondary/.test(code))
+  // 工作区行（紧凑 + 优雅 hover 底纹）
+  check('工作区行 min-h 44（紧凑）', /minHeight: '44px'/.test(code))
+  check('工作区行 r10 pad 10 12', /borderRadius: '10px'/.test(code) && /padding: '10px 12px'/.test(code))
   check('工作区行两行布局（title+path）', /flexDirection: 'column', gap: '2px'/.test(code))
   check('hover 底纹用 interactive-bg-hover（优雅半透明）', /rowHovered \? 'var\(--dsw-alias-interactive-bg-hover\)' : 'transparent'/.test(code))
   check('选中行带 check 标记', /CHECK_PATH/.test(code))

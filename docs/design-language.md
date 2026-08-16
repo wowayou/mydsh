@@ -131,3 +131,30 @@ hover 底纹: background: var(--dsw-alias-interactive-bg-hover)
            （暗色 rgba(255,255,255,0.08)，半透明优雅过渡）
 选中: trailing check 16px label-primary + 可选「最近使用」角标 12/18 label-tertiary
 ```
+
+## 8. 侧栏底部按钮必须整行扩展（Settings trigger 关键细节）
+
+之前漏掉的关键：侧栏 footer 按钮**不是**内容宽度的 pill，
+是**整行 trigger**——底纹基本占满侧栏宽度：
+
+```
+.trigger {
+  width: calc(100% + 8px);        ← 比父容器宽 8px
+  margin: 4px -4px 4px;           ← 负 margin 抵消 padding
+  height: 34px; border-radius: 12px;
+  padding: 6px 2px 6px 10px; gap: 8px;
+  background: transparent;         ← 平时透明，hover 才亮
+}
+```
+配合侧栏 root 的 `margin-right: calc(-1 * var(--dsh-sidebar-inline-padding))`，
+hover 底纹超出 padding 贴满侧栏宽度。
+⚠️ 这是 DSH 侧栏按钮的语言：整行可点、整行 hover，不是小 pill。
+折叠 rail 才收成 36px 圆形。
+
+## 9. 面板高度克制（业界快速选择面板形态）
+
+面板（Modal）高度必须克制，超高时内部滚动（参考 RiskConfirmation）：
+- dialog: `max-height: calc(100vh - 48px)`，`overflow: hidden`
+- 内容区: `min-height: 0; overflow-y: auto; overscroll-behavior: contain`
+- header 紧凑（pad 18 14 8 24），描述 13-20 用 label-secondary（次级强调）
+- 列表行收敛 min-h 44 / r10 / pad 10 12——不局促也不臃肿

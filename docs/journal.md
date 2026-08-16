@@ -588,3 +588,30 @@ LanguageRow（设置 General 的语言行）标准模式：
   r24 / layer-2 / 宽 380 / 行 min-h 56 / hover 底纹 / Escape / 遮罩关闭 / 文案）
 - react-dom 加入 smoke/stress 的 requireFn
 - 全绿：stress 91/91、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 修正：按钮底纹占满侧栏宽度 + 面板高度克制
+
+### 用户反馈
+1. 「底纹应该基本占满侧边栏宽度，你之前调研设计语言的时候没发现吗？」
+2. 「弹出的面板太高了，你做优雅些；参考业界比较成熟的实现」
+
+### 反思（问题1）
+确实没发现：Settings trigger 是 `width: calc(100% + 8px)` + `margin: 4px -4px`，
+底纹**超出侧栏 padding 基本占满整行**——我调研时读过这个 CSS 却没应用，
+按钮做成了内容宽度的 pill（width auto）。这是调研了没落地。
+
+### 修正
+1. 按钮改回**整行 trigger**（复刻 .trigger）：
+   - width: calc(100% + 8px) / margin 4px -4px → 底纹占满侧栏
+   - h34 / r12 / pad 6 2 6 10 / gap 8 / transparent（hover 才亮）
+   - rail 折叠 36px 圆形
+2. 面板高度克制（参考 RiskConfirmation / 业界快速选择面板）：
+   - dialog: max-height calc(100vh - 48px) + overflow hidden
+   - 内容区: min-height 0 / overflow-y auto / overscroll-behavior contain
+   - header 紧凑（pad 18 14 8 24）、描述 13-20 label-secondary
+   - 工作区行收敛 min-h 44 / r10 / pad 10 12
+
+### 测试
+- stress G 节断言重写（底纹 calc(100%+8px)/负 margin/transparent hover/
+  max-height/overscroll/行 44/r10）
+- 全绿：stress 91/91、smoke 35/35、check-preset 41/41

@@ -251,34 +251,36 @@ window.__ModuleLoader__.load({
 				return function() { try { document.removeEventListener('keydown', onKey); } catch {} };
 			}, [isOpen]);
 
-			// 按钮：selector pill（LanguageRow .selector 语言）。
-			//   h36 / r18 / bg-module-platform / pad 0 14 / gap 12。
-			//   rail 折叠：36px 圆形只留文件夹图标。
+			// 按钮：整行 trigger（复刻 SettingsRoot.module.css .trigger）——
+			//   width: calc(100% + 8px) + margin 4px -4px，底纹超出侧栏 padding
+			//   基本占满侧栏宽度；h34 / r12 / pad 6 2 6 10 / gap 8 / 14-22。
+			//   rail 折叠：36px 圆形只留文件夹图标（.trigger.rail）。
 			var baseStyle = {
 				flex: 'none',
-				display: 'inline-flex', alignItems: 'center', gap: '12px',
+				display: 'inline-flex', alignItems: 'center', gap: '8px',
 				boxSizing: 'border-box',
-				width: wide ? 'auto' : '36px',
-				height: wide ? '36px' : '36px',
+				width: wide ? 'calc(100% + 8px)' : '36px',
+				height: wide ? '34px' : '36px',
 				margin: wide ? '4px -4px 4px' : '8px 0 10px',
-				padding: wide ? '0 14px' : '0',
+				padding: wide ? '6px 2px 6px 10px' : '0',
 				justifyContent: wide ? 'flex-start' : 'center',
 				border: 'none',
-				borderRadius: wide ? '18px' : '50%',
-				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover)' : 'var(--dsw-alias-bg-module-platform)',
+				borderRadius: wide ? '12px' : '50%',
+				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
 				cursor: 'pointer',
 				overflow: 'hidden',
 				color: 'var(--dsw-alias-label-primary)',
 				font: 'inherit', fontSize: '14px', lineHeight: '22px',
 			};
 
-			// ── Modal（完全复刻 Modal.module.css）────────────────────────
+			// ── Modal（复刻 Modal.module.css + RiskConfirmation 的高度克制）─
 			// .root: fixed inset 0 / z-1000 / flex 居中 / pad 24
 			// .mask: --dsw-alias-bg-mask-1 + backdrop-filter var(--dsw-mask-blur)
-			// .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380 / gap 20
+			// .dialog: r24 / layer-2 底 / inverted 描边 / shadow-lv3 / 宽 380
+			//   max-height: calc(100vh - 48px)，超高内部滚动（业界快速选择面板形态）
 			// .header: pad 22 14 12 24 / title 16-24 wt500 / close 28px r8 hover
 			// .description: 14-22 / pad 0 24
-			// .body: pad 0 24 / margin-top 20
+			// .body: pad 0 24 / margin-top 20 / min-height 0 + overflow-y auto
 			var modalRootStyle = {
 				position: 'fixed', inset: '0', zIndex: 1000,
 				display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -291,9 +293,10 @@ window.__ModuleLoader__.load({
 			};
 			var dialogStyle = {
 				position: 'relative', zIndex: 1,
-				display: 'flex', flexDirection: 'column', gap: '20px',
+				display: 'flex', flexDirection: 'column', gap: '12px',
 				width: 'min(380px, 100%)',
-				padding: '0 0 24px',
+				maxHeight: 'calc(100vh - 48px)',
+				padding: '0 0 16px',
 				overflow: 'hidden',
 				border: '1px solid var(--dsw-alias-border-inverted)',
 				borderRadius: '24px',
@@ -302,7 +305,7 @@ window.__ModuleLoader__.load({
 			};
 			var headerStyle = {
 				display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-				gap: '8px', padding: '22px 14px 12px 24px',
+				gap: '8px', padding: '18px 14px 8px 24px',
 			};
 			var titleStyle = {
 				margin: '0', fontSize: '16px', lineHeight: '24px', fontWeight: 500,
@@ -316,21 +319,24 @@ window.__ModuleLoader__.load({
 			};
 			var descStyle = {
 				margin: '0', padding: '0 24px',
-				fontSize: '14px', lineHeight: '22px', fontWeight: 400,
-				color: 'var(--dsw-alias-label-primary)',
+				fontSize: '13px', lineHeight: '20px', fontWeight: 400,
+				color: 'var(--dsw-alias-label-secondary)',
 			};
 			var bodyStyle = {
 				display: 'flex', flexDirection: 'column', minWidth: '0',
-				marginTop: '20px', padding: '0 24px', gap: '4px',
+				minHeight: '0', overflowY: 'auto',
+				overscrollBehavior: 'contain',
+				marginTop: '4px', padding: '4px 16px 0',
+				gap: '2px',
 			};
-			// 工作区行：宽松两行布局（title + path），hover 整行圆角底纹。
+			// 工作区行：两行布局（title + path），hover 整行圆角底纹。
 			// 底纹用 --dsw-alias-interactive-bg-hover（半透明白，暗色 rgba(255,255,255,0.08)），
-			// 行 r12、pad 12 14，与设置面板的列表行同语言。
+			// 行 min-h 44 / r10 / pad 10 12——紧凑面板行，不局促也不臃肿。
 			var rowStyle = {
 				display: 'flex', alignItems: 'center', gap: '12px',
-				width: '100%', minHeight: '56px',
-				padding: '12px 14px',
-				border: 'none', borderRadius: '12px',
+				width: '100%', minHeight: '44px',
+				padding: '10px 12px',
+				border: 'none', borderRadius: '10px',
 				background: 'transparent', cursor: 'pointer',
 				textAlign: 'left', font: 'inherit',
 			};
