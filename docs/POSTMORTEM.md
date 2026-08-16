@@ -68,6 +68,9 @@ useEffect 直到标签页重新可见才触发，此时 document.hidden 已为 f
 现象：MutationObserver disposer 挂在 window 全局变量。
 根因：没有走 cordis effect 生命周期，插件卸载时不会自动清理。
 教训：所有资源都要通过 ctx.effect 或 useEffect cleanup 管理，不要旁路到全局变量。
+**修复状态**：第一版标注「已修」但实际只是把 disposer 挂到 window.__mydshVideoDispose
+（框架无法调度），observer 在插件卸载时仍泄漏。2026-08-16 压测发现并彻底修复：
+改走 ctx.effect，disposer 由框架在卸载时调用，断开 observer 并重置 started 标志。
 
 
 ### 坑 6：Cordis config 块导致预设加载崩溃

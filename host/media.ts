@@ -54,7 +54,7 @@ function decodePath(pathname: string): string | undefined {
   }
 }
 
-/** Range 请求（视频 seek）返回 206 局部流，否则整文件 200。 */
+/** Range 请求（视频 seek）返回 206 局部流，否则整文件 200；越界返回 416。 */
 function serveFile(req: IncomingMessage, res: ServerResponse, filePath: string): void {
   let stat: ReturnType<typeof statSync>
   try {
@@ -82,9 +82,15 @@ function serveFile(req: IncomingMessage, res: ServerResponse, filePath: string):
           'content-type': contentType,
           'content-length': String(clampedEnd - start + 1),
         })
-        createReadStream(filePath, { start, end: clampedEnd }).pipe(res)
+        const stream = createReadStream(filePath, { start, end: clampedEnd })
+        stream.on('error', () => { try { res.destroy() } catch { /* noop */ } })
+        stream.pipe(res)
         return
       }
+      // 越界（start >= size 或 start > end）：返回 416 Range Not Satisfiable。
+      res.writeHead(416, { 'content-range': `bytes */${stat.size}`, 'content-type': 'text/plain; charset=utf-8' })
+      res.end('range not satisfiable')
+      return
     }
   }
   res.writeHead(200, {
@@ -92,7 +98,9 @@ function serveFile(req: IncomingMessage, res: ServerResponse, filePath: string):
     'accept-ranges': 'bytes',
     'content-length': String(stat.size),
   })
-  createReadStream(filePath).pipe(res)
+  const stream = createReadStream(filePath)
+  stream.on('error', () => { try { res.destroy() } catch { /* noop */ } })
+  stream.pipe(res)
 }
 
 export function apply(ctx: Context): void {

@@ -87,6 +87,10 @@ window.__ModuleLoader__.load({
 			var prev = {};
 			return {
 				observe(byId) {
+					// 清理已消失的会话条目，避免 prev 无限增长（会话删除/切换后残留）。
+					for (var oldId in prev) {
+						if (!(oldId in byId)) delete prev[oldId];
+					}
 					for (var id in byId) {
 						var entry = byId[id];
 						if (!entry || typeof entry !== 'object') continue;

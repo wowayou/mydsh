@@ -67,18 +67,16 @@ window.__ModuleLoader__.load({
 
 		module.exports = {
 			name: '@mydsh/ui-video',
-			apply() {
-				// 等 DOM 可用后启动观察器；插件卸载时断开。
-				const startLater = () => {
+			apply(ctx) {
+				// 走 ctx.effect 生命周期：插件卸载时框架自动调用 disposer，
+				// 断开 MutationObserver，避免旁路到全局变量导致的资源泄漏。
+				ctx.effect(() => {
 					start();
 					return () => {
 						try { if (window.__mydshVideoObserver) window.__mydshVideoObserver.disconnect(); } catch {}
+						started = false; // 允许重新挂载
 					};
-				};
-				// apply 里没有 ctx.effect 依赖项；直接启动（观察器断开由本插件生命周期保证）。
-				const dispose = startLater();
-				// 简单起见把 disposer 挂在 window 上；页面刷新即重置。
-				window.__mydshVideoDispose = dispose;
+				}, '@mydsh/ui-video: observer');
 			},
 		};
 		return module.exports;

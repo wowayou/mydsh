@@ -43,7 +43,7 @@ export function apply(ctx: Context): void {
       } catch {
         // 日志失败不阻断通知。
       }
-      execFile('notify-send', ['--app-name=mydsh', args.title, args.body], () => {})
+      execFile('notify-send', ['--app-name=mydsh', args.title, args.body], { timeout: 5000 }, () => {})
       return 'notification sent'
     },
   }))

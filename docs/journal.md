@@ -340,3 +340,59 @@
   标题回退），共 34 项全部通过；check-preset 41/41。
 - [D] 浏览器插件变更：刷新页面即生效（无需重启进程）；
   install.sh 已重新部署。
+
+## 2026-08-16 压测与优化（第二轮）
+
+### 动机
+对整个 mydsh preset 做系统性压测，从并发竞态、资源泄漏、边界条件角度
+找问题，而非仅验证 happy path。
+
+### 方法
+新增 `tests/stress.mjs`：6 个压测维度，专门针对边沿情况——
+- A. host/notify 并发 200 会话 JSONL 写入（行完整性 + 状态机正确性）
+- B. host/media 并发 50 个 Range 请求（206 正确性 + 数据完整性 + 416 边界）
+- C. notify-tool 并发 100 次 execute（appendFileSync 不损坏 + notify-send 不泄漏）
+- D. vision-tool 并发 20 次调用（并发限制 + 截断标记）
+- E. ui-video 生命周期（observer 创建/断开/disposer 可调度）
+- F. ui-notify scanner 1000 会话性能 + prev map 内存泄漏
+
+### 发现并修复的问题
+
+1. **host/media.ts Range 越界返回 200 而非 416**（HTTP 规范违反）
+   - 反向 range（start > end）、越界 start（>= size）原代码 fall through 到 200 全文件。
+   - 修复：命中不满足条件时返回 416 Range Not Satisfiable + content-range: bytes */size。
+   - 补充：createReadStream 的 error 事件接 res.destroy，避免流中途出错时 res 挂起。
+
+2. **vision-tool.ts 无并发限制**（provider 配额风险）
+   - 模型可在一次响应内多次调用 vision_describe，每次都同步 readFile + 调视觉模型，
+     无节流时 maxActive 实测 = 20，会打爆视觉 provider 配额。
+   - 修复：加信号量 maxConcurrency=4（可 config 配置），排队执行。
+   - 补充：超长返回截断后加 `… [truncated]` 标记，让模型知道被截了。
+
+3. **vision-tool.ts 截断无省略标记**
+   - 8000 字符截断后直接 slice，模型不知道内容被截断，可能基于残缺信息回答。
+   - 修复：截断处追加 `… [truncated]`。
+
+4. **ui-video 生命周期旁路**（POSTMORTEM 坑5 标注「已修」但代码未修）
+   - apply 把 disposer 挂 window.__mydshVideoDispose，框架无法调度卸载；
+     observer 永不断开（除非页面刷新），插件卸载时泄漏。
+   - 修复：改走 ctx.effect，disposer 由框架在卸载时调用，断开 observer 并重置 started。
+   - 验证：disposer 调用后 observer 断开计数 +1，重新 apply 能创建新 observer。
+
+5. **ui-notify scanner prev map 内存泄漏**
+   - makeScanner 的 prev 对象只增不删，会话删除/切换后条目永久残留，长期运行内存增长。
+   - 修复：每次 observe 先清理已不在 byId 中的旧条目。
+
+6. **notify-tool.ts execFile 无超时**（notify-send 卡住时子进程泄漏）
+   - 修复：加 { timeout: 5000 }。
+
+### 测试结果
+- stress.mjs：36 项全部通过（0 失败 0 告警）
+- smoke.mjs：34 项全部通过（回归）
+- check-preset.mjs：41 项全部通过（回归）
+- sandbox escalation 单测：12/12 通过（回归）
+
+### 未采纳的「优化」
+- **appendFileSync 改异步/写锁**：单线程 JS 下 appendFileSync 不会交错，
+  频率仍低，POSTMORTEM 决策「不采纳异步日志」在压测下验证成立（200 并发无损）。
+  保持同步简单性。

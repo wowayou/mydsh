@@ -42,6 +42,8 @@ export interface Config {
   defaultPrompt?: string
   /** 返回文本的最大字符数。 */
   maxChars?: number
+  /** 并发视觉模型调用上限（防模型一次响应内堆叠请求打爆视觉 provider）。 */
+  maxConcurrency?: number
 }
 
 export function apply(ctx: Context, config: Config = {}): void {
@@ -49,6 +51,17 @@ export function apply(ctx: Context, config: Config = {}): void {
   const model = config.model ?? 'qwen-vl-max'
   const defaultPrompt = config.defaultPrompt ?? '请详细描述这张图片的内容，包括主体、场景、文字与可观察的细节。'
   const maxChars = config.maxChars ?? 8000
+  const maxConcurrency = config.maxConcurrency ?? 4
+
+  // 简易并发闸：模型可在一次响应里多次调用 vision_describe，无限制会堆叠
+  // 视觉模型请求打爆 provider 配额。用一个信号量把同时在飞的调用数限制住。
+  let active = 0
+  const queue: Array<() => void> = []
+  const acquire = (): Promise<void> => new Promise((release) => {
+    if (active < maxConcurrency) { active++; release() }
+    else queue.push(() => { active++; release() })
+  })
+  const release = (): void => { active--; const next = queue.shift(); if (next !== undefined) next() }
 
   ctx.tools.register(defineTool({
     name: 'vision_describe',
@@ -94,6 +107,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         source: { kind: 'plugin', plugin: 'mydsh-vision' },
       })
 
+      await acquire()
       const parts: string[] = []
       let failed = false
       let failure = ''
@@ -112,11 +126,13 @@ export function apply(ctx: Context, config: Config = {}): void {
         }
       } catch (error) {
         return `ERROR: vision model call failed: ${error instanceof Error ? error.message : String(error)}`
+      } finally {
+        release()
       }
       if (failed) return `ERROR: vision model call failed: ${failure}`
       const text = parts.join('').trim()
       if (text === '') return 'ERROR: vision model returned no text'
-      return text.length > maxChars ? text.slice(0, maxChars) : text
+      return text.length > maxChars ? text.slice(0, maxChars) + '… [truncated]' : text
     },
   }))
 }
