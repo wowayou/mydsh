@@ -490,3 +490,38 @@ NewTabButton 行为变更：
   - openNewTabInWorkspace：选 workspace 打开深链、无 workspaceId fallback 空标签页、
     无服务 fallback、异步失败不打开、同步抛错返回 error
 - 全绿：stress 72/72、smoke 35/35、check-preset 41/41
+
+## 2026-08-16 设计语言系统性梳理 + 选择框 UI 重做
+
+### 用户批评
+「UI 不行，再优化；自己总结下 dsh 的设计语言，不要让我再提醒你不合适了」
+
+### 反思
+前两版 UI 都是「凭感觉写样式」：浮层用 bg-overlay（模态遮罩底）、border-l2
+（一般分隔线）、硬编码阴影、两行菜单项、8px gap、200px 宽——全部不符合
+DSH 原生语言。这次系统性提取设计令牌，禁止再凭感觉。
+
+### 产出 docs/design-language.md
+从 harness 源码提取的 mydsh 前端设计语言备忘：
+- 颜色令牌（暗色）：--dsw-specific-menu / --dsw-alias-border-inverted /
+  --dsw-shadow-lv3 / label-primary/secondary/tertiary / interactive-bg-hover
+- 下拉菜单（Menu.module.css 完整复刻）：卡片 4px pad / r12 / border-inverted /
+  shadow-lv3 / min-width 218；菜单项 min-h 40 / r10 / pad 8 10 / 14-22 /
+  hover；头部 12-16 label-tertiary；4px gap
+- 侧栏 footer trigger / 新建会话主按钮规范
+- 硬性规则：浮层一律 specific-menu + border-inverted + shadow-lv3 + r12 + 4px pad
+
+### 选择框重做（对照 design-language.md）
+1. 卡片：--dsw-specific-menu（原来 bg-overlay ❌）→ 真 token
+2. 描边：--dsw-alias-border-inverted（原来 border-l2 ❌）
+3. 阴影：--dsw-shadow-lv3（原来硬编码 0 8px 24px ❌）
+4. 菜单项：单行 icon+label 复刻 .item（原来两行 title+path ❌）
+5. 图标：DSH 同款 IconFolderClose16 path（workspace 语义）
+6. gap 4px（原来 8px ❌）、min-width 218（原来 200 ❌）
+7. Escape 关闭（对齐 Menu.tsx 行为）
+8. label 槽带 title=path tooltip（hover 显示完整路径，不占两行）
+
+### 测试
+- stress G 节视觉断言从 8 项扩到 21 项：每个令牌、每个尺寸、每个 gap 都有断言
+  （含「不用 bg-overlay」负向断言），防止以后凭感觉改坏
+- 全绿：stress 85/85、smoke 35/35、check-preset 41/41

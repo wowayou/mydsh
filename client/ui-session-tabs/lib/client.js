@@ -126,6 +126,18 @@ window.__ModuleLoader__.load({
 			}, createElement('path', { d: NEW_CHAT_ICON_PATH, fill: 'currentColor' }));
 		}
 
+		// DSH 同款 ic_ds_folder_close_16 path（菜单项 leading 图标，workspace 语义）。
+		var FOLDER_ICON_PATH =
+			'M5.05582 0.518756L4.50669 0.86654L5.05582 0.518756ZM13 9.4837L13.65 9.4837L13.65 3.53962L13 3.53962L12.35 3.53962L12.35 9.4837L13 9.4837ZM11.3264 1.86603L11.3264 1.21603L6.52313 1.21603L6.52313 1.86603L6.52313 2.51603L11.3264 2.51603L11.3264 1.86603ZM5.58054 1.34727L6.12968 0.999489L5.60495 0.170972L5.05582 0.518756L4.50669 0.86654L5.03141 1.69506L5.58054 1.34727ZM4.11323 1.23058e-13L4.11323 -0.65L1.67359 -0.65L1.67359 5.00699e-14L1.67359 0.65L4.11323 0.65L4.11323 1.23058e-13ZM0 1.67359L-0.65 1.67359L-0.65 9.4837L0 9.4837L0.65 9.4837L0.65 1.67359L0 1.67359ZM11.3264 11.1573L11.3264 10.5073L1.67359 10.5073L1.67359 11.1573L1.67359 11.8073L11.3264 11.8073L11.3264 11.1573ZM0 9.4837L-0.65 9.4837C-0.65 10.767 0.390308 11.8073 1.67359 11.8073L1.67359 11.1573L1.67359 10.5073C1.10828 10.5073 0.65 10.049 0.65 9.4837L0 9.4837ZM1.67359 5.00699e-14L1.67359 -0.65C0.390307 -0.65 -0.65 0.390309 -0.65 1.67359L0 1.67359L0.65 1.67359C0.65 1.10828 1.10828 0.65 1.67359 0.65L1.67359 5.00699e-14ZM5.05582 0.518756L5.60495 0.170972C5.28121 -0.340193 4.71829 -0.65 4.11323 -0.65L4.11323 1.23058e-13L4.11323 0.65C4.27282 0.65 4.4213 0.731715 4.50669 0.86654L5.05582 0.518756ZM6.52313 1.86603L6.52313 1.21603C6.36354 1.21603 6.21507 1.13431 6.12968 0.999489L5.58054 1.34727L5.03141 1.69506C5.35515 2.20622 5.91808 2.51603 6.52313 2.51603L6.52313 1.86603ZM13 3.53962L13.65 3.53962C13.65 2.25634 12.6097 1.21603 11.3264 1.21603L11.3264 1.86603L11.3264 2.51603C11.8917 2.51603 12.35 2.97431 12.35 3.53962L13 3.53962ZM13 9.4837L12.35 9.4837C12.35 10.049 11.8917 10.5073 11.3264 10.5073L11.3264 11.1573L11.3264 11.8073C12.6097 11.8073 13.65 10.767 13.65 9.4837L13 9.4837Z';
+
+		function FolderIcon() {
+			return createElement('svg', {
+				width: 16, height: 16, viewBox: '0 0 16 16',
+				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+				'aria-hidden': true,
+			}, createElement('path', { transform: 'translate(1.5 2.429)', d: FOLDER_ICON_PATH, fill: 'currentColor' }));
+		}
+
 		// ── workspace 选择纯逻辑（可测） ─────────────────────────────────
 
 		/** workspaces.list 快照 → 选择框选项 [{id, title, path}]（按列表顺序）。 */
@@ -166,6 +178,15 @@ window.__ModuleLoader__.load({
 		}
 
 		// ── NewTabButton 组件 ───────────────────────────────────────────
+		// 视觉规范见 docs/design-language.md（DSH 设计令牌提取）：
+		//  - 按钮对齐 Settings trigger（34px/12px/14px/hover interactive-bg-hover）
+		//  - 选择框浮层完全复刻 DSH Menu：
+		//      卡片: --dsw-specific-menu 底 / --dsw-alias-border-inverted 描边 /
+		//            --dsw-shadow-lv3 / r12 / 4px pad / min-width 218
+		//      菜单项: min-h 40 / r10 / pad 8 10 / 14-22 / label-primary /
+		//            hover interactive-bg-hover / 16px 图标槽 / label ellipsis
+		//      头部: 12-16 / label-tertiary / pad 8 10
+		//      4px gap（bottom: calc(100% + 4px)）
 
 		function NewTabButton(props) {
 			var wide = props.wide !== false;
@@ -181,9 +202,7 @@ window.__ModuleLoader__.load({
 
 			var onPick = useCallback(function(id) {
 				setOpen(false);
-				if (openNewTabInWorkspace(workspaces, id) === 'fallback') {
-					// 已在 openNewTabInWorkspace 内打开空标签页。
-				}
+				openNewTabInWorkspace(workspaces, id);
 			}, [workspaces]);
 
 			var onToggle = useCallback(function() {
@@ -197,7 +216,7 @@ window.__ModuleLoader__.load({
 				setOpen(function(v) { return !v; });
 			}, [workspaces]);
 
-			// 点击外部关闭：全局 pointerdown 监听（挂载时注册）。
+			// 点击外部关闭 + Escape 关闭：全局监听（挂载时注册，对齐 Menu.tsx）。
 			useEffect(function() {
 				if (!isOpen) return;
 				var onDown = function(e) {
@@ -206,11 +225,18 @@ window.__ModuleLoader__.load({
 						setOpen(false);
 					} catch {}
 				};
+				var onKey = function(e) {
+					try { if (e.key === 'Escape') setOpen(false); } catch {}
+				};
 				try { document.addEventListener('pointerdown', onDown); } catch {}
-				return function() { try { document.removeEventListener('pointerdown', onDown); } catch {} };
+				try { document.addEventListener('keydown', onKey); } catch {}
+				return function() {
+					try { document.removeEventListener('pointerdown', onDown); } catch {}
+					try { document.removeEventListener('keydown', onKey); } catch {}
+				};
 			}, [isOpen]);
 
-			// 与 SettingsRoot.module.css .trigger 对齐；rail 时对齐 .trigger.rail。
+			// 按钮：对齐 SettingsRoot.module.css .trigger（rail 对齐 .trigger.rail）。
 			var baseStyle = {
 				flex: 'none',
 				display: 'inline-flex', alignItems: 'center', gap: '8px',
@@ -222,42 +248,56 @@ window.__ModuleLoader__.load({
 				justifyContent: wide ? 'flex-start' : 'center',
 				border: 'none',
 				borderRadius: wide ? '12px' : '50%',
-				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,0.08))' : 'transparent',
+				background: isHovered || isOpen ? 'var(--dsw-alias-interactive-bg-hover)' : 'transparent',
 				cursor: 'pointer',
 				overflow: 'hidden',
-				color: 'var(--dsw-alias-label-primary, #e6e9ef)',
+				color: 'var(--dsw-alias-label-primary)',
 				font: 'inherit', fontSize: '14px', lineHeight: '22px',
 			};
-			// 浮层：绝对定位在侧栏 footer 上方（相对按钮容器），对齐 DSH Menu 语言。
+			// 浮层卡片：完全复刻 Menu.module.css .list（向上开：bottom 4px gap）。
 			var menuStyle = {
-				position: 'absolute', bottom: 'calc(100% + 8px)', left: wide ? 0 : '50%',
+				position: 'absolute',
+				bottom: 'calc(100% + 4px)',
+				left: wide ? 0 : '50%',
 				transform: wide ? undefined : 'translateX(-50%)',
-				minWidth: '200px', maxWidth: '280px', maxHeight: '320px', overflowY: 'auto',
-				background: 'var(--dsw-alias-bg-overlay, #1e2129)',
-				border: '1px solid var(--dsw-alias-border-l2, #3a4152)',
-				borderRadius: '12px', padding: '4px',
-				boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-				zIndex: 1000,
+				boxSizing: 'border-box',
+				padding: '4px',
+				display: 'flex', flexDirection: 'column',
+				border: '1px solid var(--dsw-alias-border-inverted)',
+				borderRadius: '12px',
+				background: 'var(--dsw-specific-menu)',
+				boxShadow: 'var(--dsw-shadow-lv3)',
+				minWidth: '218px', maxWidth: '360px',
+				maxHeight: 'calc(100vh - 24px)', overflowY: 'auto',
+				zIndex: 100,
 			};
-			var itemStyle = {
-				display: 'flex', flexDirection: 'column', gap: '2px',
-				padding: '8px 12px', borderRadius: '8px', cursor: 'pointer',
-				textAlign: 'left', border: 'none', background: 'transparent', width: '100%',
-				font: 'inherit',
-			};
-			var itemTitleStyle = {
-				fontSize: '14px', lineHeight: '22px',
-				color: 'var(--dsw-alias-label-primary, #e6e9ef)',
-				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-			};
-			var itemPathStyle = {
-				fontSize: '12px', lineHeight: '18px',
-				color: 'var(--dsw-alias-label-tertiary, #6b7280)',
-				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-			};
+			// 头部：复刻 Menu.module.css .label。
 			var headerStyle = {
-				padding: '6px 12px', fontSize: '12px', lineHeight: '18px',
-				color: 'var(--dsw-alias-label-tertiary, #6b7280)',
+				padding: '8px 10px', fontSize: '12px', lineHeight: '16px',
+				color: 'var(--dsw-alias-label-tertiary)',
+				overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+			};
+			// 菜单项：复刻 Menu.module.css .item（单行 icon + label）。
+			var itemStyle = {
+				display: 'flex', alignItems: 'center', gap: '8px',
+				width: '100%', minHeight: '40px',
+				padding: '8px 10px',
+				border: 'none', borderRadius: '10px',
+				background: 'transparent', cursor: 'pointer',
+				fontSize: '14px', lineHeight: '22px',
+				color: 'var(--dsw-alias-label-primary)', textAlign: 'left',
+			};
+			// 图标槽：复刻 .itemIcon。
+			var itemIconStyle = {
+				display: 'inline-flex', flex: 'none',
+				width: '16px', height: '16px',
+				alignItems: 'center', justifyContent: 'center',
+				color: 'var(--dsw-alias-label-tertiary)',
+			};
+			// label 槽：复刻 .itemLabel。
+			var itemLabelStyle = {
+				flex: '1', minWidth: '0',
+				overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
 			};
 
 			return createElement('span', { style: { position: 'relative', display: 'inline-flex' }, ref: anchorRef },
@@ -274,15 +314,16 @@ window.__ModuleLoader__.load({
 				isOpen ? createElement('div', {
 					role: 'menu', style: menuStyle,
 				},
-					createElement('div', { style: headerStyle }, T.workspacePick),
+					createElement('div', { style: headerStyle, role: 'presentation' }, T.workspacePick),
 					choices.map(function(c) {
 						return createElement('button', {
 							type: 'button', role: 'menuitem', key: c.id,
 							onClick: function() { onPick(c.id); },
 							style: itemStyle,
 						},
-							createElement('span', { style: itemTitleStyle }, c.title),
-							createElement('span', { style: itemPathStyle }, c.path));
+							createElement('span', { style: itemIconStyle },
+								createElement(FolderIcon, {})),
+							createElement('span', { style: itemLabelStyle, title: c.path }, c.title));
 					}),
 				) : null,
 			);

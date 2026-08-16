@@ -416,13 +416,36 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   // 视觉调性：NewTabButton 必须对齐 DSH footer 的 Settings trigger
   // （SettingsRoot.module.css .trigger: 34px/12px 圆角/14px/label-primary/hover interactive-bg-hover），
   // 而不是第三方补丁感的小按钮。rail 折叠态对齐 .trigger.rail（36px 圆形）。
+  // 选择框浮层必须完全复刻 DSH Menu（Menu.module.css）：
+  //   卡片: --dsw-specific-menu 底 / --dsw-alias-border-inverted 描边 /
+  //         --dsw-shadow-lv3 / r12 / 4px pad / min-width 218
+  //   菜单项: min-h 40 / r10 / pad 8 10 / 14-22 / label-primary / hover / 单行 icon+label
+  //   头部: 12-16 / label-tertiary / pad 8 10
+  //   4px gap（bottom: calc(100% + 4px)）
   check('NewTabButton 对齐 34px 高度', /height: wide \? '34px' : '36px'/.test(code), '高度应为 34px')
   check('NewTabButton 对齐 12px 圆角', /borderRadius: wide \? '12px' : '50%'/.test(code), '圆角应为 12px')
   check('NewTabButton 对齐 14px 字号', /fontSize: '14px'/.test(code), '字号应为 14px')
   check('NewTabButton 使用 label-primary 色', /--dsw-alias-label-primary/.test(code))
-  check('NewTabButton hover 用 interactive-bg-hover', /interactive-bg-hover/.test(code))
+  check('NewTabButton hover 用 interactive-bg-hover', /--dsw-alias-interactive-bg-hover/.test(code))
   check('NewTabButton 用 DSH 同款 NewChat 图标', /NEW_CHAT_ICON_PATH/.test(code))
   check('NewTabButton rail 对齐 36px 圆形', /borderRadius: wide \? '12px' : '50%'/.test(code) && /width: wide \? 'auto' : '36px'/.test(code) && /height: wide \? '34px' : '36px'/.test(code))
+  // 浮层卡片令牌（对照 docs/design-language.md）
+  check('菜单卡片用 --dsw-specific-menu 底', /background: 'var\(--dsw-specific-menu\)'/.test(code))
+  check('菜单卡片用 --dsw-alias-border-inverted 描边', /border: '1px solid var\(--dsw-alias-border-inverted\)'/.test(code))
+  check('菜单卡片用 --dsw-shadow-lv3 阴影', /boxShadow: 'var\(--dsw-shadow-lv3\)'/.test(code))
+  check('菜单卡片 4px pad + r12', /padding: '4px'/.test(code) && /borderRadius: '12px'/.test(code))
+  check('菜单卡片 min-width 218', /minWidth: '218px'/.test(code))
+  check('菜单 4px gap 向上开', /bottom: 'calc\(100% \+ 4px\)'/.test(code))
+  check('菜单不用 bg-overlay（模态遮罩）', !/--dsw-alias-bg-overlay/.test(code), '浮层不该用 bg-overlay')
+  // 菜单项令牌（复刻 .item / .itemIcon / .itemLabel）
+  check('菜单项 min-h 40 / r10 / pad 8 10', /minHeight: '40px'/.test(code) && /borderRadius: '10px'/.test(code) && /padding: '8px 10px'/.test(code))
+  check('菜单项 14-22 行高', /fontSize: '14px'/.test(code) && /lineHeight: '22px'/.test(code))
+  check('菜单项 16px 图标槽 label-tertiary', /width: '16px', height: '16px'/.test(code) && /--dsw-alias-label-tertiary/.test(code))
+  check('菜单项 label 槽 ellipsis', /textOverflow: 'ellipsis'/.test(code))
+  check('菜单项用文件夹图标（workspace 语义）', /FOLDER_ICON_PATH/.test(code))
+  check('头部 12-16 label-tertiary pad 8 10', /fontSize: '12px', lineHeight: '16px'/.test(code) && /padding: '8px 10px'/.test(code))
+  // 交互：Escape 关闭
+  check('Escape 关闭菜单', /e\.key === 'Escape'/.test(code))
 
   // ── workspace 选择逻辑（openNewTabInWorkspace / workspaceChoices）──
   if (t && typeof t.workspaceChoices === 'function' && typeof t.openNewTabInWorkspace === 'function') {
