@@ -271,3 +271,72 @@
   除非该插件导出了 schemastery Config schema。TypeScript interface 不算。
   排查预设加载问题最快的方法：把 default 改成 standard。
 - [V] preset check 31/31 通过；smoke 23/23 通过。
+
+## 2026-08-16 新建会话仍失败：预设本地插件依赖解析（根因补完）
+
+- [F] **现象**：修复 vision-tool config 与 SoundSettings 之后，选择「mydsh 模式」
+  新建会话仍失败（settings.yaml default 指向 code 时可建）。
+- [F] **根因（真正的根因）**：预设目录在用户 home 下
+  （~/.dsh/.agent-presets/mydsh/），其本地插件 ./plugins/notify-tool.ts 与
+  ./plugins/vision-tool.ts 里 `import '@deepseek-ai/dsh-tools'` 等裸依赖，
+  按 Node 向上查找 node_modules 永远到不了 harness 的依赖树，
+  导入即抛 `Cannot find module '@deepseek-ai/dsh-tools'`。
+  预设行的「裸包名」由 dsh-agent-presets 的 PresetTree.import() 改从
+  harness base 解析（没问题），但「相对文件」行里的传递依赖
+  仍按文件位置解析——这是 harness 的既有机制，预设本地插件必须
+  自带可解析的依赖路径。
+- [A] 排查：`curl -X POST http://127.0.0.1:3080/api/session.create`
+  （payload `{"type":"client-request","rpcId":"x","method":"session.create",
+  "payload":{"agentPreset":"mydsh"}}`）拿到 agent-preset-invalid +
+  `Cannot find module '@deepseek-ai/dsh-tools'` 精确错误。
+- [F] **修复**：install.sh 新增 3b 步——幂等创建
+  `$DSH_HOME/.agent-presets/node_modules` → `$DSH_HOME/profiles/node_modules`
+  符号链接，让预设目录向上能找到 profile 的依赖根（该根是符号链接链，
+  最终解析到 checkout 同一份源码，模块实例一致）。
+- [T] **回归测试**：tests/check-preset.mjs 扩展——
+  1) 断言 .agent-presets/node_modules 符号链接存在且指向正确；
+  2) 解析每个相对插件文件里的裸依赖，必须能从部署位置 resolve。
+  移除符号链接时该测试 6 项失败（与线上错误一一对应）。
+- [V] preset check 41/41 通过；smoke 23/23 通过。
+- [D] 运行中的 dsh 进程会缓存失败的模块解析（ESM module map），
+  修复后需重启 dsh 进程（restart.sh）才生效。
+
+## 2026-08-16 修复生效 + restart.sh 两个 set -u 崩溃点
+
+- [V] **线上验证（重启后）**：
+  - `POST /api/session.create` + `agentPreset: mydsh` → `ok:true`（此前
+    agent-preset-invalid + Cannot find module '@deepseek-ai/dsh-tools'）。
+  - 新 mydsh 会话完整跑通一轮：user/message → request/header
+    （deepseek-official/deepseek-v4-flash）→ assistant/message → turn/end completed。
+  - 预设挂载、agent 循环、模型路由全部正常。
+- [F] **restart.sh 两个 `set -u` 崩溃点**（自动重启两次失败的原因）：
+  1. 第 13 行 `if [ -z "$MYDSH_RESTART_DETACHED" ]` —— 未定义变量直接崩；
+     之前能用是因为同一交互终端跑过第二次（首次已 export 继承）。
+  2. 第 58 行 `if [ -n "$DSH_UA_ALIAS" ]` —— 同样未定义变量崩溃，
+     导致旧进程已杀、新进程没拉起的中间态。
+  均改为 `${VAR:-}`，全文件审计确认无其他未保护引用；bash -n 通过。
+- [V] 手动 `pnpm dsh web --port 3080` 重启后，mydsh 预设立即可用。
+- [D] 备注：用户已将 agent-presets.default 改为 mydsh（GUI 设置），
+  新会话默认即 mydsh 模式。
+
+## 2026-08-16 通知优化：多任务可辨识（哪个标签/哪个任务）
+
+- [F] **问题**：多任务并发时，提示音响了但不知道是哪个标签页/哪个任务完成的：
+  通知正文只有 UUID，标签栏无提示，多条通知共用 tag 互相覆盖。
+- [A] **浏览器侧 @mydsh/ui-notify 重写监听层**：
+  - 从「只看当前会话」改为读 sessions.list store（getSnapshot/subscribe），
+    本标签页里的后台任务完成也会响；不依赖 React 渲染调度（沿用坑 1 教训）。
+  - 通知标题带 displayTitle（标题 → cwd 目录名 → 短 id），正文附 8 位短 id；
+    每条通知独立 tag（mydsh-done-<id>），并发完成互不覆盖。
+  - 后台标签页完成时闪烁 document.title 为 `[✓] <任务名>`（15s 或回到
+    标签页时恢复），标签栏一眼可见是哪个标签。
+  - 点击通知 → 聚焦标签页 + sessions.open(id) 打开该会话。
+  - **跨标签去重**：多标签共享同一会话列表，若每个标签都通知会响 N 次。
+    用 localStorage 认领（30s 窗口）保证同一完成边沿只有一个标签通知；
+    完成会话是「本标签当前会话」时无条件通知（任务属主）。
+- [A] **主机侧 host/notify.ts**：notify-send 消息带 cwd 目录名 + 短 id
+  （标题在事件日志里，host 侧不重读；与浏览器 displayTitle 兜底一致）。
+- [T] smoke 新增 10 项 ui-notify 逻辑单测（scanner 边沿 / 认领窗口 /
+  标题回退），共 34 项全部通过；check-preset 41/41。
+- [D] 浏览器插件变更：刷新页面即生效（无需重启进程）；
+  install.sh 已重新部署。

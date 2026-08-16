@@ -10,7 +10,7 @@ set -euo pipefail
 
 # Detach from parent process group: when invoked from a dsh agent bash tool,
 # killing dsh will not cascade to this script.
-if [ -z "$MYDSH_RESTART_DETACHED" ]; then
+if [ -z "${MYDSH_RESTART_DETACHED:-}" ]; then
   export MYDSH_RESTART_DETACHED=1
   exec setsid bash "$0" "$@"
 fi
@@ -55,7 +55,7 @@ cd "$CHECKOUT"
 #   DSH_UA_ALIAS=codex       → User-Agent: codex/<version>
 #   DSH_UA_ALIAS=opencode    → User-Agent: opencode/<version>
 # Or set DSH_APP_PRODUCT directly for a custom value.
-if [ -n "$DSH_UA_ALIAS" ]; then
+if [ -n "${DSH_UA_ALIAS:-}" ]; then
   export DSH_APP_PRODUCT="$DSH_UA_ALIAS"
   echo "  UA alias: $DSH_UA_ALIAS"
 fi

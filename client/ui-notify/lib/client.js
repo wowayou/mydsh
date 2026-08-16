@@ -1,9 +1,21 @@
 // mydsh ui-notify — browser-side task completion notification (Notification API + sound).
 //
-// Two registrations:
-// 1. conversation.input.dock#mydsh-notify — null component, detects running→idle.
-// (Settings panel registration removed: settings.general.item requires store/locale/inject
-//  props that our hand-written bundle doesn't provide, causing render crashes.)
+// Registrations:
+// 1. conversation.input.dock#mydsh-notify — null component; watches ALL sessions
+//    through the sessions list store (sessions.list) instead of only the current
+//    session, so a background task in this tab also pings.
+// 2. settings.general.item#mydsh-notify-sound — custom sound panel.
+//
+// Multi-task identification (why this exists):
+// - Notification carries the session's displayTitle (title → cwd basename → id).
+// - A hidden tab flashes its document.title to "[✓] <task>" so the user can see
+//   WHICH TAB finished without switching to it.
+// - Each notification has its own tag (per session), so concurrent completions
+//   do not replace each other; clicking it focuses the tab and opens the session.
+// - Cross-tab dedupe: multiple tabs share the same session list, so a completion
+//   would otherwise sound in every open tab. A localStorage claim (30s window)
+//   makes exactly one tab notify per edge; the tab where the session is CURRENT
+//   always wins (it is the task's owner).
 //
 // Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
 window.__ModuleLoader__.load({
@@ -15,19 +27,81 @@ window.__ModuleLoader__.load({
 		const { useEffect, useRef, useState, useCallback, createElement } = React;
 
 		var SOUND_KEY = 'mydsh.notify.sound';
+		/** Cross-tab claim window: within this many ms a fresh claim suppresses other tabs. */
+		var CLAIM_WINDOW_MS = 30000;
+		/** How long a hidden tab keeps the "[✓] <task>" title flash. */
+		var FLASH_MS = 15000;
 
 		function isZh() {
 			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
 		}
 		var T = isZh()
-			? { title: '任务完成', body: '会话已完成',
+			? { title: '任务完成', body: '会话已完成', donePrefix: '✅',
+			    flashPrefix: '[✓]',
 			    soundLabel: '完成提示音', test: '试听',
 			    custom: '自定义音频', default: '默认提示音',
 			    upload: '选择文件', remove: '恢复默认' }
-			: { title: 'Task done', body: 'The session has finished',
+			: { title: 'Task done', body: 'The session has finished', donePrefix: '✅',
+			    flashPrefix: '[✓]',
 			    soundLabel: 'Notification sound', test: 'Test',
 			    custom: 'Custom audio', default: 'Default beep',
 			    upload: 'Choose file', remove: 'Reset' };
+
+		// ── 纯逻辑（可在 smoke 测试里直接驱动） ──────────────────────────────
+
+		/** "session-<uuid>" → 前 8 位短号，用于正文与日志消歧。 */
+		function shortIdOf(id) {
+			var s = String(id == null ? '' : id);
+			var base = s.indexOf('session-') === 0 ? s.slice(8) : s;
+			return base.length > 8 ? base.slice(0, 8) : base;
+		}
+
+		/** 人类可读标签：displayTitle（标题 → cwd 目录名 → 短 id）。 */
+		function displayLabelOf(entry, id) {
+			var t = entry && (typeof entry.displayTitle === 'string' ? entry.displayTitle : entry.title);
+			return (typeof t === 'string' && t !== '') ? t : shortIdOf(id);
+		}
+
+		/**
+		 * 跨标签页去重认领：同一 completion 边沿只让一个标签页通知。
+		 * 30 秒内有新鲜认领 → 返回 false（本页跳过）；否则写入认领并返回 true。
+		 * storage 无 localStorage 时永远放行（单页退化）。
+		 */
+		function claimEdge(id, now, storage) {
+			try {
+				var key = 'mydsh.notify.edge:' + id;
+				var prev = storage.getItem(key);
+				if (prev !== null && now - Number(prev) < CLAIM_WINDOW_MS) return false;
+				storage.setItem(key, String(now));
+				return true;
+			} catch {
+				return true;
+			}
+		}
+
+		/**
+		 * 边沿扫描器：对 byId 快照做 running→idle / idle→running 边沿检测。
+		 * 首次观测只记基线（不触发）；onState(id, entry, 'idle'|'running') 仅在边沿调用。
+		 */
+		function makeScanner(onState) {
+			var prev = {};
+			return {
+				observe(byId) {
+					for (var id in byId) {
+						var entry = byId[id];
+						if (!entry || typeof entry !== 'object') continue;
+						var running = !!entry.running;
+						var was = prev[id];
+						if (was === undefined) { prev[id] = running; continue; }
+						if (was === true && running === false) { try { onState(id, entry, 'idle'); } catch {} }
+						else if (was === false && running === true) { try { onState(id, entry, 'running'); } catch {} }
+						prev[id] = running;
+					}
+				},
+			};
+		}
+
+		// ── 声音（保持不变） ───────────────────────────────────────────────
 
 		function loadCustomSound() {
 			try { return localStorage.getItem(SOUND_KEY); } catch { return null; }
@@ -71,11 +145,49 @@ window.__ModuleLoader__.load({
 			beep();
 		}
 
-		function notify(title, body) {
+		// ── 标签页标题闪烁（后台标签可辨识） ───────────────────────────────
+
+		var flash = { original: null, timer: null };
+
+		function flashTab(label) {
+			try {
+				var doc = document;
+				if (flash.original === null) flash.original = doc.title;
+				doc.title = T.flashPrefix + ' ' + label;
+				if (flash.timer !== null) clearTimeout(flash.timer);
+				flash.timer = setTimeout(restoreTitle, FLASH_MS);
+			} catch {}
+		}
+
+		function restoreTitle() {
+			try {
+				if (flash.original === null) return;
+				if (flash.timer !== null) { clearTimeout(flash.timer); flash.timer = null; }
+				if (document.title !== flash.original) document.title = flash.original;
+				flash.original = null;
+			} catch {}
+		}
+
+		// ── 通知 ───────────────────────────────────────────────────────────
+
+		/**
+		 * 发一条完成通知。title = "<✅> <任务名>"，body 附短 id；
+		 * 每条通知独立 tag（并发完成互不覆盖）；点击 → 聚焦本标签页并打开该会话。
+		 */
+		function notify(id, label, sessions) {
 			playSound();
 			try {
 				if (typeof window === 'undefined' || !('Notification' in window)) return;
-				var show = function() { try { new Notification(title, { body, tag: 'mydsh-done' }); } catch {} };
+				var body = T.body + ' · ' + shortIdOf(id);
+				var show = function() {
+					try {
+						var n = new Notification(T.donePrefix + ' ' + label, { body: body, tag: 'mydsh-done-' + id });
+						n.onclick = function() {
+							try { window.focus(); } catch {}
+							try { if (sessions && typeof sessions.open === 'function') sessions.open(id); } catch {}
+						};
+					} catch {}
+				};
 				if (Notification.permission === 'granted') show();
 				else if (Notification.permission !== 'denied') {
 					Notification.requestPermission().then(function(p) { if (p === 'granted') show(); });
@@ -83,33 +195,83 @@ window.__ModuleLoader__.load({
 			} catch {}
 		}
 
-		// --- Detection component (null, no visual) ---
-		function NotifyWatcher(props) {
-			var useSession = props.useSession;
-			var sessionId = props.sessionId;
-			var runningRef = useRef(undefined);
+		/** 完成边沿处理：去重 + 认领（非当前会话）+ 通知 + 后台标签闪烁。 */
+		var notified = new Set();
 
-			var running = useSession(function(s) { return s ? s.running : false; });
-			useEffect(function() {
-				var was = runningRef.current; runningRef.current = running;
-				if (was === true && running === false) {
-					notify(T.title, T.body + ' · ' + String(sessionId));
+		function onCompleted(id, entry, isCurrent, sessions) {
+			// 本页去重（subscribe 与 poll 双路径 + 组件重挂载）
+			if (notified.has(id)) return;
+			notified.add(id);
+			var label = displayLabelOf(entry, id);
+			var doNotify = function() {
+				notify(id, label, sessions);
+				try { if (document.hidden) flashTab(label); } catch {}
+			};
+			// 属主（本标签当前会话）无条件通知，并先写认领，让其他标签看到新鲜认领后静默。
+			if (isCurrent) {
+				try { claimEdge(id, Date.now(), (typeof localStorage !== 'undefined' ? localStorage : null)); } catch {}
+				doNotify();
+				return;
+			}
+			// 非属主：跨标签恰好一次。优先 Web Locks（互斥），回退 localStorage 认领。
+			var storage = (typeof localStorage !== 'undefined' ? localStorage : null);
+			try {
+				if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+					navigator.locks.request('mydsh.notify.' + id, { ifAvailable: true }, function(lock) {
+						if (!lock) return; // 其他标签正在通知
+						if (!claimEdge(id, Date.now(), storage)) return; // 已被认领
+						doNotify();
+					});
+					return;
 				}
-			}, [running, sessionId]);
+			} catch {}
+			if (claimEdge(id, Date.now(), storage)) doNotify();
+		}
 
-			useEffect(function() {
-				var check = function() {
+		// --- 监听组件（null，无视觉） ---
+		// 读 sessions.list store（getSnapshot/subscribe），不依赖 React 渲染调度，
+		// 后台标签页也能即时触发（设计教训：不要依赖 React 渲染做后台操作）。
+		function NotifyWatcher(props) {
+			var sessions = props.sessions;
+			var scanner = useRef(null);
+			var scan = useRef(null);
+			if (scanner.current === null) {
+				scanner.current = makeScanner(function(id, entry, kind) {
+					if (kind === 'running') { try { notified.delete(id); } catch {} return; }
+					var snap = null;
+					try { if (sessions && sessions.list) snap = sessions.list.getSnapshot(); } catch {}
+					var isCurrent = snap ? snap.current === id : false;
+					onCompleted(id, entry, isCurrent, sessions);
+				});
+				scan.current = function() {
 					try {
-						var current = useSession(function(s) { return s ? s.running : false; });
-						var was = runningRef.current; runningRef.current = current;
-						if (was === true && current === false) {
-							notify(T.title, T.body + ' · ' + String(sessionId));
-						}
+						if (!sessions || !sessions.list) return;
+						var snap = sessions.list.getSnapshot();
+						scanner.current.observe((snap && snap.byId) || {});
 					} catch {}
 				};
-				var timer = setInterval(check, 500);
+			}
+
+			// 1) store 变更订阅（前台即时）
+			useEffect(function() {
+				if (!sessions || !sessions.list) return;
+				var unsub = null;
+				try { unsub = sessions.list.subscribe(scan.current); } catch {}
+				return function() { try { if (unsub) unsub(); } catch {} };
+			}, [sessions]);
+
+			// 2) 轮询兜底（后台标签页；绕过 React 调度）
+			useEffect(function() {
+				var timer = setInterval(function() { try { if (scan.current) scan.current(); } catch {} }, 500);
 				return function() { clearInterval(timer); };
-			}, [sessionId]);
+			}, []);
+
+			// 3) 回到本标签页时恢复原始标题
+			useEffect(function() {
+				var onVis = function() { try { if (!document.hidden) restoreTitle(); } catch {} };
+				try { document.addEventListener('visibilitychange', onVis); } catch {}
+				return function() { try { document.removeEventListener('visibilitychange', onVis); } catch {} };
+			}, []);
 
 			return null;
 		}
@@ -204,8 +366,9 @@ window.__ModuleLoader__.load({
 
 		module.exports = {
 			name: '@mydsh/ui-notify',
-			inject: ['slots'],
+			inject: ['slots', 'sessions'],
 			apply(ctx) {
+				var sessions = ctx.get('sessions');
 				var slots = ctx.get('slots');
 				if (slots === undefined) return;
 				ctx.effect(
@@ -213,7 +376,7 @@ window.__ModuleLoader__.load({
 						name: 'conversation.input.dock',
 						id: 'mydsh-notify',
 						order: 100,
-					}, NotifyWatcher)),
+					}, (props) => NotifyWatcher({ ...props, sessions }))),
 					'@mydsh/ui-notify: dock watcher',
 				);
 				ctx.effect(
@@ -225,6 +388,8 @@ window.__ModuleLoader__.load({
 					'@mydsh/ui-notify: sound settings',
 				);
 			},
+			// 供 tests/smoke.mjs 直接驱动的纯逻辑（不参与运行时）。
+			__test: { makeScanner, claimEdge, displayLabelOf, shortIdOf },
 		};
 		return module.exports;
 	}

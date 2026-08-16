@@ -18,6 +18,12 @@ PROFILE="${DSH_PROFILE:-web}"
 PROFILE_DIR="$DSH_HOME/profiles/$PROFILE"
 PATCH_FILE="$PROFILE_DIR/cordis.patch.yml"
 PRESET_DIR="$DSH_HOME/.agent-presets/mydsh"
+# 预设本地插件（./plugins/*.ts）的依赖解析根：让 .agent-presets 能向上找到
+# profile 的 node_modules。预设目录在用户 home 下，Node 从那里向上找
+# node_modules 永远到不了 harness 的依赖，./plugins/*.ts 里的
+# import '@deepseek-ai/dsh-tools' 等会直接崩掉（新建会话失败）。
+PRESET_NM="$DSH_HOME/.agent-presets/node_modules"
+PROFILE_NM="$DSH_HOME/profiles/node_modules"
 HOST_PLUGIN_DIR="$PROFILE_DIR/plugins"
 CLIENT_ROOT="$DSH_HOME/profiles/node_modules/@mydsh"
 DRY=0
@@ -60,6 +66,30 @@ for pkg in "$PROJECT"/client/*/; do
   run "rm -rf '$CLIENT_ROOT/$name'"
   run "cp -r '$pkg' '$CLIENT_ROOT/$name'"
 done
+
+# 3b) 预设本地插件依赖解析（幂等：符号链接指向 profile node_modules）
+#     依赖 $DSH_HOME/profiles/node_modules 存在（第 3 步已确保）。
+say "3b) 预设插件依赖 → $PRESET_NM -> $PROFILE_NM"
+if [ "$DRY" -eq 1 ]; then
+  if [ -L "$PRESET_NM" ] && [ "$(readlink "$PRESET_NM")" = "$PROFILE_NM" ]; then
+    echo "  [dry] (已就绪)"
+  else
+    echo "  [dry]   ln -s '$PROFILE_NM' '$PRESET_NM'"
+  fi
+elif [ -L "$PRESET_NM" ]; then
+  if [ "$(readlink "$PRESET_NM")" = "$PROFILE_NM" ]; then
+    echo "  (已就绪)"
+  else
+    echo "  warning: $PRESET_NM 指向 $(readlink "$PRESET_NM")，期望 $PROFILE_NM；"
+    echo "           跳过（如需修复请手动删除后重跑 install.sh）"
+  fi
+elif [ -e "$PRESET_NM" ]; then
+  echo "  warning: $PRESET_NM 是真实目录而非符号链接，跳过；"
+  echo "           预设本地插件可能无法解析 @deepseek-ai/* 依赖"
+else
+  ln -s "$PROFILE_NM" "$PRESET_NM"
+  echo "  符号链接已创建"
+fi
 
 # 4) profile patch 行（幂等：marker 块内整体替换，块外保留用户内容）
 PATCH_BLOCK_START="# ==== mydsh begin (managed by install.sh, do not edit) ===="
@@ -123,3 +153,4 @@ echo "· 新会话在侧栏选择预设「mydsh 模式」即可使用 notify_use
 echo "· 浏览器插件：刷新页面（若跑着 dev:web 则自动热更新）。"
 echo "· 补丁（若本轮应用）需重启 dsh 进程生效。"
 echo "· 完成提醒日志: \$DSH_HOME/mydsh/notify.jsonl"
+echo "· 预设插件依赖: \$DSH_HOME/.agent-presets/node_modules -> profiles/node_modules（install.sh 自动维护）"

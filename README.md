@@ -30,6 +30,8 @@
 #    for config HMR (plugin rows hot-reload on cordis.patch.yml edits):
 #    node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port 3081
 #    Or simply: ./restart.sh  (already includes --expose-internals)
+#    A restart is REQUIRED after the first install: the running process caches
+#    the failed preset-plugin module resolution until then.
 
 # 3) Refresh browser page
 #    New session: select the "mydsh 模式" preset in the sidebar
@@ -107,6 +109,12 @@ mydsh/
 └── manifest.json                  # File → deploy target manifest
 ```
 
+> Deployed layout note: `install.sh` also creates the symlink
+> `$DSH_HOME/.agent-presets/node_modules → $DSH_HOME/profiles/node_modules` so the
+> preset's local plugin files (`./plugins/*.ts`) can resolve `@deepseek-ai/*`
+> imports from their home-directory location (a preset-local plugin's bare
+> imports resolve from the preset dir, not from the harness).
+
 ---
 
 ## 中文
@@ -155,6 +163,8 @@ mydsh/
 
 # 2) 重启 dsh 进程（让 sandbox 补丁与最新插件代码生效）
 #    Ctrl-C 停掉 `pnpm dsh web --port 3081`，再重新启动即可；会话数据不丢。
+#    首次部署后重启是必须的：运行中的进程会缓存预设插件失败的模块解析，
+#    不重启则「mydsh 模式」仍无法新建会话。
 
 # 3) 浏览器刷新页面
 #    新会话：侧栏选择预设「mydsh 模式」
@@ -169,7 +179,7 @@ cd /home/forbackup/deepseek-harness
 DSH_HOME=/tmp/mydsh-smoke-home NODE_PATH=$HOME/.dsh/profiles/node_modules \
   node --import tsx/esm /home/forbackup/Dev/mydsh/tests/smoke.mjs
 
-# 预设行解析校验
+# 预设行解析校验（含部署位置上的插件依赖解析 + node_modules 符号链接断言）
 node /home/forbackup/Dev/mydsh/tests/check-preset.mjs
 
 # sandbox 补丁单测
@@ -181,6 +191,8 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 
 - **完成提醒**：浏览器开着（即使标签页在后台）→ 走浏览器通知；浏览器没开 → 主机 `notify-send`
   （需图形会话）。所有事件追加到 `$DSH_HOME/mydsh/notify.jsonl`。
+- **多任务识别**：通知带会话标题（标题→目录名→短 id），后台标签页会在标签栏闪烁 `[✓] 任务名`；
+  点击通知可定位并打开该会话；同一任务完成只会有一个标签页发声（跨标签去重）。
 - **视觉**：直接对模型说「看一下这张图」并给出图片路径；或让模型用 `vision_describe`。
 - **批注**：悬停一条回复 → 点击「✎ 批注」；先选中回复里的文字会被自动摘录进批注。
 - **多标签**：会话头「⧉」一键新标签页打开本会话；手动访问 `http://127.0.0.1:3081/?session=<id>` 也可直达。

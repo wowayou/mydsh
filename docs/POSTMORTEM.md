@@ -91,6 +91,30 @@ useEffect 直到标签页重新可见才触发，此时 document.hidden 已为 f
 4. 排查预设加载问题最快的方法：在 settings.yaml 里把 default 改成 standard，
    如果能建会话，就是预设的问题；然后在预设里逐行注释自定义插件行。
 
+### 坑 7：预设本地插件的裸依赖在部署位置解析不到
+
+现象：选择「mydsh 模式」新建会话失败（default 指向 code 时可建），
+API 报 agent-preset-invalid + `Cannot find module '@deepseek-ai/dsh-tools'`，
+Require stack 指向 ~/.dsh/.agent-presets/mydsh/plugins/*.ts。
+
+根因：预设目录在用户 home 下。预设「行的名字」是裸包名时，
+dsh-agent-presets 的 PresetTree.import() 会改从 harness base 解析（没问题）；
+但「相对文件」行（./plugins/xxx.ts）按文件位置解析，文件里
+`import '@deepseek-ai/dsh-tools'` 等裸依赖由 Node 从文件目录向上找
+node_modules——home 下永远到不了 harness 的依赖树，导入必崩。
+
+坑点：smoke 测试从仓库路径 + NODE_PATH 导入插件，掩盖了这个真实运行时的
+解析失败；check-preset 只检查相对文件「存在」，没检查其「依赖可解析」。
+
+教训：
+1. 预设本地插件（./xxx.ts）的裸依赖必须在部署位置可解析。
+   install.sh 用符号链接把 $DSH_HOME/profiles/node_modules 挂到
+   $DSH_HOME/.agent-presets/node_modules（profile 依赖根最终指向 checkout
+   同一份源码，模块实例一致）。
+2. 回归测试要按「部署后的解析路径」验证，而不是按仓库路径 + NODE_PATH 验证。
+   check-preset.mjs 现在会解析每个相对插件文件的裸依赖，并断言符号链接存在。
+3. 运行中的 dsh 进程会缓存失败的 ESM 解析，修复后必须重启进程才生效。
+
 ## 13 条社区建议采纳状态
 
 | # | 建议 | 状态 | 理由 |
@@ -98,7 +122,7 @@ useEffect 直到标签页重新可见才触发，此时 document.hidden 已为 f
 | 1 | ui-video 生命周期 | 已修 | 正确，改为 slots + useEffect |
 | 2 | ui-session-tabs 闭包 | 已修 | 正确，用 props 替代模块级变量 |
 | 3 | 异步日志写入 | 不采纳 | 频率极低不阻塞；增加复杂度不值得 |
-| 4 | 通知去重合并 | 待做 | 有价值，非当前优先级 |
+| 4 | 通知去重合并 | 已修 | 跨标签去重（localStorage 认领）+ 并发完成独立通知，见 journal 2026-08-16 |
 | 5 | media CSRF 安全 | 已修 | 正确，加 Origin 检查 |
 | 6 | 批注 v2 | v2 规划 | 架构升级，当前实现不完整已移除 |
 | 7 | 多图视觉 | 待做 | 功能增强，当前单图够用 |

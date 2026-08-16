@@ -92,6 +92,41 @@ for (const c of clientCases) {
 }
 
 // ── 主机插件：tsx 导入并执行 apply（fake ctx）───
+// ── ui-notify 通知优化逻辑（多任务可辨识：标题/跨标签去重/边沿检测） ──
+console.log('\n── ui-notify 通知逻辑冒烟测试 ──')
+try {
+  const uiNotify = loadClientBundle(join(PROJECT, 'client/ui-notify/lib/client.js'))
+  const t = uiNotify.plugin.__test
+  check('ui-notify 导出 __test', t && typeof t.makeScanner === 'function')
+  if (t) {
+    // 1) 边沿扫描器：基线不触发；running→idle 触发；idle→running 触发；不重复
+    const seen = []
+    const sc = t.makeScanner((id, entry, kind) => seen.push([id, kind]))
+    sc.observe({ a: { running: true } })            // 基线
+    sc.observe({ a: { running: true } })            // 无变化
+    check('scanner 基线不触发', seen.length === 0, JSON.stringify(seen))
+    sc.observe({ a: { running: false } })           // idle 边沿
+    sc.observe({ a: { running: false } })           // 无变化
+    sc.observe({ a: { running: true } })            // running 边沿
+    sc.observe({ a: { running: false } })           // 再次 idle 边沿
+    check('scanner idle/running 边沿', JSON.stringify(seen) === JSON.stringify([['a','idle'],['a','running'],['a','idle']]), JSON.stringify(seen))
+    // 2) 跨标签认领：窗口期内只放行一次，窗口外放行
+    const fake = { data: {}, getItem(k) { return Object.prototype.hasOwnProperty.call(this.data, k) ? this.data[k] : null }, setItem(k, v) { this.data[k] = v } }
+    const now = 1000000
+    check('claim 首次通过', t.claimEdge('x', now, fake) === true)
+    check('claim 窗口内拒绝', t.claimEdge('x', now + 1000, fake) === false)
+    check('claim 窗口外通过', t.claimEdge('x', now + 40000, fake) === true)
+    check('claim 无 storage 放行', t.claimEdge('y', now, null) === true)
+    // 3) 标题回退：displayTitle → title → 短 id
+    check('label 取 displayTitle', t.displayLabelOf({ displayTitle: '修复通知', title: 'x', running: false }, 'session-1234567890abc') === '修复通知')
+    check('label 回退 title', t.displayLabelOf({ title: '备用', running: false }, 'session-1234567890abc') === '备用')
+    check('label 回退短 id', t.displayLabelOf({ running: false }, 'session-1234567890abcdefgh') === '12345678', t.displayLabelOf({ running: false }, 'session-1234567890abcdefgh'))
+    check('shortId 去前缀', t.shortIdOf('session-12345678') === '12345678')
+  }
+} catch (error) {
+  check('ui-notify 通知逻辑', false, String(error && error.stack || error))
+}
+
 // 注意：本脚本需以 `node --import tsx tests/smoke.mjs` 运行（tsx 解析 .ts）。
 console.log('\n── 主机插件冒烟测试 ──')
 try {

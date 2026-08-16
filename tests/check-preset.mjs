@@ -2,9 +2,12 @@
 //  - 相对行 ('./x') 相对预设目录解析；
 //  - 裸包名从 harness base（apps/cli）解析（含子路径行）；
 //  - 'cordis:' 内建。
+//  - 相对插件文件的裸依赖（import '@deepseek-ai/*' 等）必须能从部署位置解析
+//    （回归：.agent-presets 在用户 home 下，Node 向上找 node_modules 到不了
+//    harness，靠 install.sh 的 .agent-presets/node_modules 符号链接）。
 // 用法: node tests/check-preset.mjs [preset 目录] [harness base]
 import { createRequire } from 'node:module'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readlinkSync, readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -55,14 +58,29 @@ function collect(list, out = []) {
 const all = collect(rows)
 check(`YAML 解析 + 行数 ${all.length}`, all.length >= 25)
 
-let nameCount = 0
+// 收集一个源码文件里的全部模块说明符（from 'x' / import 'x' / require('x')）。
+function bareSpecifiersOf(file) {
+  const source = readFileSync(file, 'utf8')
+  const specs = new Set()
+  const re = /(?:from\s+|import\s+|require\(\s*)(['"])([^'"]+)\1/g
+  for (const m of source.matchAll(re)) {
+    const spec = m[2]
+    if (spec.startsWith('.') || spec.startsWith('cordis:') || spec.startsWith('node:')) continue
+    // 裸内建（fs/path/os 等）跳过：运行时由 Node 提供。
+    if (!spec.includes('/') && !spec.startsWith('@')) continue
+    specs.add(spec)
+  }
+  return [...specs]
+}
+
+const relativeRows = []
 for (const row of all) {
   const name = row.name
-  nameCount += 1
   if (name.startsWith('cordis:')) { check(`[${row.id}] 内建 ${name}`, true); continue }
   if (name.startsWith('.')) {
     const rel = join(PRESET_DIR, name)
     check(`[${row.id}] 相对文件 ${name}`, existsSync(rel), `→ ${rel}`)
+    if (existsSync(rel) && rel.endsWith('.ts')) relativeRows.push([row.id, rel])
     continue
   }
   // 裸包名（可能带子路径）：先从 harness base 解析 package.json。
@@ -73,6 +91,30 @@ for (const row of all) {
     try { resolved = require.resolve(`${root}/package.json`, { paths: [HARNESS_BASE] }) } catch {}
   }
   check(`[${row.id}] 包 ${name}`, resolved !== null, resolved ?? '')
+}
+
+// ── 部署不变量：.agent-presets/node_modules 符号链接（install.sh 维护）──
+const PRESET_NM = join(REAL_DSH_HOME, '.agent-presets/node_modules')
+const PROFILE_NM = join(REAL_DSH_HOME, 'profiles/node_modules')
+if (existsSync(PRESET_NM)) {
+  const isLink = lstatSync(PRESET_NM).isSymbolicLink()
+  const target = isLink ? readlinkSync(PRESET_NM) : ''
+  check('.agent-presets/node_modules 是符号链接', isLink)
+  check('.agent-presets/node_modules 指向 profiles/node_modules', isLink && target === PROFILE_NM, `→ ${target}`)
+} else {
+  check('.agent-presets/node_modules 存在', false, '(install.sh 第 3b 步未执行？)')
+}
+
+// ── 相对插件文件的裸依赖：必须能从部署位置解析（新建会话失败的回归）──
+console.log('\n── 相对插件依赖解析（部署位置） ──')
+for (const [id, file] of relativeRows) {
+  const specs = bareSpecifiersOf(file)
+  if (specs.length === 0) { check(`[${id}] ${file} 无裸依赖`, true); continue }
+  for (const spec of specs) {
+    let resolved = null
+    try { resolved = require.resolve(spec, { paths: [dirname(file)] }) } catch {}
+    check(`[${id}] ${file.split('/').pop()} → ${spec}`, resolved !== null, resolved ?? '')
+  }
 }
 
 // 顶部元数据（persona 等）非行结构仅检查文件存在。

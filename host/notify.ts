@@ -39,11 +39,20 @@ function probeOsNotify(): boolean {
   return osNotifyAvailable
 }
 
-/** 会话名：优先 agent.id（= sessionId），否则取标题字段，兜底 unknown。 */
-function sessionLabel(agent: { id?: unknown; sessionId?: unknown; title?: unknown } | undefined): string {
+/** 会话名：优先 agent.id（= sessionId），并尽力附加 cwd 目录名作为人类可读提示；无 id 时取标题字段，兜底 unknown。 */
+function sessionLabel(agent: { id?: unknown; sessionId?: unknown; title?: unknown; session?: { header?: { cwd?: unknown } } } | undefined): string {
   if (agent === undefined) return 'unknown'
   const id = String(agent.id ?? agent.sessionId ?? '')
-  if (id !== '' && id !== 'undefined') return id
+  if (id !== '' && id !== 'undefined') {
+    // 会话标题在事件日志里（host 侧不重读），这里用创建时的工作目录名做提示：
+    // 与浏览器侧 displayTitle 的兜底逻辑一致（title → cwd 目录名 → id）。
+    const cwd = agent.session?.header?.cwd
+    if (typeof cwd === 'string' && cwd !== '') {
+      const base = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? ''
+      if (base !== '') return `${base} (${id.slice(0, 8)})`
+    }
+    return id
+  }
   const title = String(agent.title ?? '')
   return title !== '' && title !== 'undefined' ? title : 'unknown'
 }
