@@ -38,11 +38,15 @@ window.__ModuleLoader__.load({
 		var T = isZh()
 			? { title: '任务完成', body: '会话已完成', donePrefix: '✅',
 			    flashPrefix: '[✓]',
+			    pendingTitle: '需要确认', pendingPrefix: '⚠️',
+			    pendingApproval: '等待审批', pendingPlan: '计划待审', pendingQuestion: '等待回答',
 			    soundLabel: '完成提示音', test: '试听',
 			    custom: '自定义音频', default: '默认提示音',
 			    upload: '选择文件', remove: '恢复默认' }
 			: { title: 'Task done', body: 'The session has finished', donePrefix: '✅',
 			    flashPrefix: '[✓]',
+			    pendingTitle: 'Needs your input', pendingPrefix: '⚠️',
+			    pendingApproval: 'Waiting for approval', pendingPlan: 'Plan awaiting review', pendingQuestion: 'Waiting for answer',
 			    soundLabel: 'Notification sound', test: 'Test',
 			    custom: 'Custom audio', default: 'Default beep',
 			    upload: 'Choose file', remove: 'Reset' };
@@ -80,8 +84,11 @@ window.__ModuleLoader__.load({
 		}
 
 		/**
-		 * 边沿扫描器：对 byId 快照做 running→idle / idle→running 边沿检测。
-		 * 首次观测只记基线（不触发）；onState(id, entry, 'idle'|'running') 仅在边沿调用。
+		 * 边沿扫描器：对 byId 快照做 running→idle / idle→running 边沿检测，
+		 * 以及 pendingInteraction 从无→有（打断出现）/ 有→无（打断解除）的边沿检测。
+		 * 首次观测只记基线（不触发）；onState(id, entry, kind) 仅在边沿调用：
+		 *   kind = 'idle' | 'running' | 'pending' | 'pending-cleared'。
+		 * pending 覆盖 approval / plan-review / question 三类打断（store 投影里已分类）。
 		 */
 		function makeScanner(onState) {
 			var prev = {};
@@ -95,11 +102,16 @@ window.__ModuleLoader__.load({
 						var entry = byId[id];
 						if (!entry || typeof entry !== 'object') continue;
 						var running = !!entry.running;
+						var pending = entry.pendingInteraction || null;
 						var was = prev[id];
-						if (was === undefined) { prev[id] = running; continue; }
-						if (was === true && running === false) { try { onState(id, entry, 'idle'); } catch {} }
-						else if (was === false && running === true) { try { onState(id, entry, 'running'); } catch {} }
-						prev[id] = running;
+						if (was === undefined) { prev[id] = { running: running, pending: pending }; continue; }
+						// running 边沿
+						if (was.running === true && running === false) { try { onState(id, entry, 'idle'); } catch {} }
+						else if (was.running === false && running === true) { try { onState(id, entry, 'running'); } catch {} }
+						// pending 边沿：无→有（打断出现）/ 有→无（打断解除）
+						if (was.pending === null && pending !== null) { try { onState(id, entry, 'pending'); } catch {} }
+						else if (was.pending !== null && pending === null) { try { onState(id, entry, 'pending-cleared'); } catch {} }
+						prev[id] = { running: running, pending: pending };
 					}
 				},
 			};
@@ -232,6 +244,75 @@ window.__ModuleLoader__.load({
 			if (claimEdge(id, Date.now(), storage)) doNotify();
 		}
 
+		/** 打断边沿处理（approval / plan-review / question 三类）。
+		 *  与 completed 独立去重：同一打断只通知一次，pending-cleared 时清理。
+		 *  打断比完成更紧急（需要用户介入），属主标签无条件通知 + 跨标签去重。 */
+		var notifiedPending = new Set();
+
+		/** pendingInteraction 分类 → 本地化文案。 */
+		function pendingLabelOf(kind) {
+			if (kind === 'approval') return T.pendingApproval;
+			if (kind === 'plan-review') return T.pendingPlan;
+			if (kind === 'question') return T.pendingQuestion;
+			return T.pendingTitle;
+		}
+
+		/** 打断出现：发通知（标题 ⚠️ + 分类 + 会话名）+ 后台标签闪烁。
+		 *  跨标签去重用独立的 claim key（与 completed 的 key 分开，互不干扰）。 */
+		function onPending(id, entry, kind, isCurrent, sessions) {
+			if (notifiedPending.has(id)) return;
+			notifiedPending.add(id);
+			var label = displayLabelOf(entry, id);
+			var pendingText = pendingLabelOf(kind);
+			var doNotify = function() {
+				playSound();
+				try {
+					if (typeof window === 'undefined' || !('Notification' in window)) return;
+					var body = pendingText + ' · ' + shortIdOf(id);
+					var show = function() {
+						try {
+							var n = new Notification(T.pendingPrefix + ' ' + label, { body: body, tag: 'mydsh-pending-' + id });
+							n.onclick = function() {
+								try { window.focus(); } catch {}
+								try { if (sessions && typeof sessions.open === 'function') sessions.open(id); } catch {}
+							};
+						} catch {}
+					};
+					if (Notification.permission === 'granted') show();
+					else if (Notification.permission !== 'denied') {
+						Notification.requestPermission().then(function(p) { if (p === 'granted') show(); });
+					}
+				} catch {}
+				try { if (document.hidden) flashTab(label); } catch {}
+			};
+			// 打断更紧急：属主无条件通知，并先写认领。
+			var claimKey = 'mydsh.notify.pending:' + id;
+			if (isCurrent) {
+				try { claimEdge(claimKey, Date.now(), (typeof localStorage !== 'undefined' ? localStorage : null)); } catch {}
+				doNotify();
+				return;
+			}
+			// 非属主：跨标签恰好一次。
+			var storage = (typeof localStorage !== 'undefined' ? localStorage : null);
+			try {
+				if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+					navigator.locks.request('mydsh.notify.pending.' + id, { ifAvailable: true }, function(lock) {
+						if (!lock) return;
+						if (!claimEdge(claimKey, Date.now(), storage)) return;
+						doNotify();
+					});
+					return;
+				}
+			} catch {}
+			if (claimEdge(claimKey, Date.now(), storage)) doNotify();
+		}
+
+		/** 打断解除：清理本页去重 + 恢复标签标题（让闪烁停）。 */
+		function onPendingCleared(id) {
+			try { notifiedPending.delete(id); } catch {}
+			try { if (document.hidden) restoreTitle(); } catch {}
+		}
+
 		// --- 监听组件（null，无视觉） ---
 		// 读 sessions.list store（getSnapshot/subscribe），不依赖 React 渲染调度，
 		// 后台标签页也能即时触发（设计教训：不要依赖 React 渲染做后台操作）。
@@ -242,6 +323,18 @@ window.__ModuleLoader__.load({
 			if (scanner.current === null) {
 				scanner.current = makeScanner(function(id, entry, kind) {
 					if (kind === 'running') { try { notified.delete(id); } catch {} return; }
+					if (kind === 'pending') {
+						var snap2 = null;
+						try { if (sessions && sessions.list) snap2 = sessions.list.getSnapshot(); } catch {}
+						var isCur2 = snap2 ? snap2.current === id : false;
+						var kind2 = entry && entry.pendingInteraction ? entry.pendingInteraction : 'question';
+						onPending(id, entry, kind2, isCur2, sessions);
+						return;
+					}
+					if (kind === 'pending-cleared') {
+						onPendingCleared(id);
+						return;
+					}
 					var snap = null;
 					try { if (sessions && sessions.list) snap = sessions.list.getSnapshot(); } catch {}
 					var isCurrent = snap ? snap.current === id : false;

@@ -431,3 +431,33 @@
 
 ### 测试结果
 stress 49/49、smoke 35/35、check-preset 41/41 全绿。
+
+## 2026-08-16 新建会话按钮 UI 调性修正
+
+### 用户反馈
+「New session in a new tab 位置合适吗？要考虑下整体的 UI 调性。」
+
+### 位置分析
+`sidebar.footer.action` 是唯一可注入的侧栏级位置：
+- `sidebar` single slot 被 ui-sidebar 独占，无法在顶部 New Session 按钮旁插入
+- `conversation.session.header.actions` 是会话级操作区（已有 ⧉ 打开本会话），
+  放「新建会话」语义错位
+- footer.action 是 DSH 预留的「侧栏底部工具区」（Settings 上方），
+  放「新建会话」作为全局操作语义可接受
+结论：位置保留，视觉必须对齐 DSH 调性。
+
+### 视觉调性对齐（对照 SettingsRoot.module.css .trigger）
+修正前（第三方补丁感）：
+- 28px 高 / 8px 圆角 / 12px 字 / label-secondary / ⧉ 字符图标
+- 折叠 rail 无特殊处理
+
+修正后（对齐 DSH footer 原生语言）：
+- 34px 高 / 12px 圆角 / 14px 字 / label-primary
+- hover 用 interactive-bg-hover（React state 模拟，手写 bundle 无 CSS Modules）
+- 16px 线条 SVG 图标 = DSH 顶部 New Session 同款 ic_ds_new_chat_outline_16 path
+- 折叠 rail：36px 圆形只留图标（对齐 .trigger.rail）
+- margin/padding 与 .trigger 一致（4px -4px / 6px 2px 6px 10px）
+
+### 测试
+- stress G 节新增 8 项视觉调性断言（34px/12px/14px/label-primary/hover/图标/rail 36px 圆形）
+- 全绿：stress 57/57、smoke 35/35、check-preset 41/41

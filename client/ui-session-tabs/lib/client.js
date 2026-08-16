@@ -104,25 +104,56 @@ window.__ModuleLoader__.load({
 		}
 
 		// "New session in new tab" button for the sidebar footer action slot.
-		// wide: show icon + label; collapsed rail: icon only (tooltip covers it).
+		// 视觉完全对齐 DSH footer 的 Settings trigger（figma sidebar foot）：
+		//   34px 高 / 12px 圆角 / 透明 + hover interactive-bg-hover / 14px label-primary /
+		//   16px 线条图标（与顶部 New Session 同款 ic_ds_new_chat_outline_16 path）。
+		// wide: 图标 + 文字；折叠 rail: 36px 圆形只留图标（与 Settings 折叠态一致）。
+		// 手写 bundle 无 CSS Modules，hover 背景用 React state 模拟。
+		var NEW_CHAT_ICON_PATH =
+			'M8.00003 0.3237C3.76075 0.3237 0.32373 3.76072 0.32373 8C0.32373 9.17603 0.589121 10.2922 1.0632 11.2901L1.35291 11.8989L2.5705 11.3205L2.28079 10.7117C1.89079 9.89074 1.67301 8.97167 1.67301 8C1.67301 4.50546 4.50549 1.67298 8.00003 1.67298C11.4946 1.67298 14.3271 4.50546 14.3271 8C14.3271 11.4945 11.4946 14.327 8.00003 14.327C7.28473 14.327 6.76077 14.277 6.29621 14.1487C5.83857 14.0224 5.40441 13.8109 4.88514 13.4488C4.12569 12.919 3.03778 12.7316 2.141 13.2978L2.12682 13.307L2.11264 13.3171L1.34886 13.854L1.79659 15.188L2.86122 14.4384C3.19068 14.2305 3.68325 14.2542 4.11326 14.5539C4.72789 14.9826 5.30042 15.2724 5.93762 15.4484C6.56803 15.6224 7.22776 15.6763 8.00003 15.6763C12.2393 15.6763 15.6763 12.2393 15.6763 8C15.6763 3.76072 12.2393 0.3237 8.00003 0.3237ZM7.32033 4.82535V7.32536H4.82538V8.67464H7.32033V11.1747H8.6696V8.67464H11.1747V7.32536H8.6696V4.82535H7.32033Z';
+
+		function NewChatIcon() {
+			return createElement('svg', {
+				width: 16, height: 16, viewBox: '0 0 16 16',
+				fill: 'none', xmlns: 'http://www.w3.org/2000/svg',
+				'aria-hidden': true, style: { flexShrink: 0 },
+			}, createElement('path', { d: NEW_CHAT_ICON_PATH, fill: 'currentColor' }));
+		}
+
 		function NewTabButton(props) {
 			var wide = props.wide !== false;
+			var hovered = useState(false);
+			var isHovered = hovered[0]; var setHovered = hovered[1];
 			var onClick = useCallback(function() {
 				try { window.open(blankTabUrl(), '_blank'); } catch {}
 			}, []);
-			// 复用 dsh 侧栏 New Session 按钮的视觉语言：紧凑行内按钮。
+			// 与 SettingsRoot.module.css .trigger 对齐；rail 时对齐 .trigger.rail。
 			var baseStyle = {
-				display: 'inline-flex', alignItems: 'center', gap: '6px',
-				height: '28px', padding: wide ? '0 10px' : '0',
-				border: 'none', borderRadius: '8px', cursor: 'pointer',
-				background: 'transparent', font: 'inherit', fontSize: '12px',
-				color: 'var(--dsw-alias-label-secondary, #9aa3b2)',
+				flex: 'none',
+				display: 'inline-flex', alignItems: 'center', gap: '8px',
+				boxSizing: 'border-box',
+				width: wide ? 'auto' : '36px',
+				height: wide ? '34px' : '36px',
+				margin: wide ? '4px -4px 4px' : '8px 0 10px',
+				padding: wide ? '6px 2px 6px 10px' : '0',
+				justifyContent: wide ? 'flex-start' : 'center',
+				border: 'none',
+				borderRadius: wide ? '12px' : '50%',
+				background: isHovered ? 'var(--dsw-alias-interactive-bg-hover, rgba(127,127,127,0.08))' : 'transparent',
+				cursor: 'pointer',
+				overflow: 'hidden',
+				color: 'var(--dsw-alias-label-primary, #e6e9ef)',
+				font: 'inherit', fontSize: '14px', lineHeight: '22px',
 			};
 			return createElement('button', {
-				type: 'button', onClick: onClick,
+				type: 'button',
+				onClick: onClick,
+				onMouseEnter: function() { setHovered(true); },
+				onMouseLeave: function() { setHovered(false); },
 				'aria-label': T.newTabLabel, title: T.newTabLabel,
 				style: baseStyle,
-			}, '⧉', wide ? createElement('span', null, T.newTab) : null);
+			}, createElement(NewChatIcon, {}),
+				wide ? createElement('span', { style: { overflow: 'hidden', whiteSpace: 'nowrap' } }, T.newTab) : null);
 		}
 
 		module.exports = {

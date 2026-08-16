@@ -1,14 +1,21 @@
 /**
- * mydsh — 主机层「任务完成通知」插件（host plane）。
+ * mydsh — 主机层「任务完成 / 打断通知」插件（host plane）。
  *
- * 监听 `agent/status`（running → idle 的下降沿），做两件事：
- *   1. 追加 JSONL 日志到 `$DSH_HOME/mydsh/notify.jsonl`（可回溯的过程记录）；
- *   2. 尽力调用桌面通知 `notify-send`（探测一次可用性并缓存；无桌面会话则跳过）。
+ * 监听两类信号：
+ *   1. `agent/status`（running → idle 的下降沿）：任务完成通知；
+ *   2. `session/event` 的 `approval/asked`：需要用户确认的打断通知
+ *      （此时 agent 仍在 running phase，agent/status 不会变化，原来的完成
+ *      通知完全错过这类「中间打断」状态）。
+ *
+ * 每类都做两件事：追加 JSONL 日志到 `$DSH_HOME/mydsh/notify.jsonl`（可回溯）；
+ * 尽力调用桌面通知 `notify-send`（探测一次可用性并缓存；无桌面会话则跳过）。
  *
  * 挂在 `~/.dsh/profiles/web/cordis.patch.yml`（或 home patch），随 patch 热重载。
  * 不发布任何服务 —— 纯监听行，符合 preset/host 分层规则（跨会话行为 → host）。
  *
  * 浏览器侧的可视提醒由客户端插件 `@mydsh/ui-notify` 负责（Notification API + 提示音）。
+ * 浏览器侧还覆盖 question / plan-review 两类打断（读 sessions.list 的 pendingInteraction
+ * 投影），host 侧只覆盖 approval/asked（question 不写 session 日志，host 监听不到）。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import { execFile, spawnSync } from 'node:child_process'
@@ -88,7 +95,29 @@ export function apply(ctx: Context): void {
       // 日志失败不阻断通知。
     }
     if (canNotify) {
-      execFile('notify-send', ['--app-name=mydsh', '✅ 任务完成', `会话 ${sessionId} 已完成`], () => {})
+      execFile('notify-send', ['--app-name=mydsh', '✅ 任务完成', `会话 ${sessionId} 已完成`], { timeout: 5000 }, () => {})
+    }
+  })
+
+  // 需要用户确认的打断：approval/asked 写入 session 日志，host 可监听。
+  // 此时 agent 仍在 running phase（turn 还没结束），agent/status 不变，
+  // 完成通知完全错过这类「中间打断」状态——单独监听才能补上。
+  // question / plan-review 不写 session 日志（运行时挂起），host 监听不到，
+  // 由浏览器侧 ui-notify 读 sessions.list 的 pendingInteraction 投影覆盖。
+  ctx.on('session/event', (session: { id?: unknown }, event: { type: string; data?: { toolName?: unknown; reason?: unknown } }) => {
+    if (event.type !== 'approval/asked') return
+    const sessionId = String(session?.id ?? 'unknown')
+    const toolName = String(event.data?.toolName ?? '')
+    const reason = event.data?.reason !== undefined ? String(event.data.reason) : ''
+    const body = reason !== '' ? `${sessionId} · ${toolName}\n${reason}` : `${sessionId} · ${toolName}`
+    const record = { t: new Date().toISOString(), event: 'approval-asked', sessionId, toolName, reason: reason || null }
+    try {
+      appendFileSync(LOG_FILE, `${JSON.stringify(record)}\n`)
+    } catch {
+      // 日志失败不阻断通知。
+    }
+    if (canNotify) {
+      execFile('notify-send', ['--app-name=mydsh', '⚠️ 需要确认', body], { timeout: 5000 }, () => {})
     }
   })
 }

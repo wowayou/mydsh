@@ -412,6 +412,17 @@ console.log('\n── G. ui-session-tabs 深链/空白 URL 构造 ──')
   check('注册 sidebar.footer.action#mydsh-new-tab', ids.includes('mydsh-new-tab'))
   check('注册 conversation.session.header.actions#mydsh-open-tab', ids.includes('mydsh-open-tab'))
   check('注册 conversation.input.dock#mydsh-url-session', ids.includes('mydsh-url-session'))
+
+  // 视觉调性：NewTabButton 必须对齐 DSH footer 的 Settings trigger
+  // （SettingsRoot.module.css .trigger: 34px/12px 圆角/14px/label-primary/hover interactive-bg-hover），
+  // 而不是第三方补丁感的小按钮。rail 折叠态对齐 .trigger.rail（36px 圆形）。
+  check('NewTabButton 对齐 34px 高度', /height: wide \? '34px' : '36px'/.test(code), '高度应为 34px')
+  check('NewTabButton 对齐 12px 圆角', /borderRadius: wide \? '12px' : '50%'/.test(code), '圆角应为 12px')
+  check('NewTabButton 对齐 14px 字号', /fontSize: '14px'/.test(code), '字号应为 14px')
+  check('NewTabButton 使用 label-primary 色', /--dsw-alias-label-primary/.test(code))
+  check('NewTabButton hover 用 interactive-bg-hover', /interactive-bg-hover/.test(code))
+  check('NewTabButton 用 DSH 同款 NewChat 图标', /NEW_CHAT_ICON_PATH/.test(code))
+  check('NewTabButton rail 对齐 36px 圆形', /borderRadius: wide \? '12px' : '50%'/.test(code) && /width: wide \? 'auto' : '36px'/.test(code) && /height: wide \? '34px' : '36px'/.test(code))
 }
 
 console.log(failures === 0 ? `\n压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)
