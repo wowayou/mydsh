@@ -22,20 +22,28 @@
 ### Quick start
 
 ```bash
-# 1) Deploy (idempotent, safe to re-run)
+# Deploy + restart + verify in one command (recommended).
+# Default port is 3081 (or $DSH_WEB_PORT); it safely replaces an existing dsh web
+# instance on that port, but refuses to kill a non-dsh process.
+./up.sh
+
+# Use a different port, e.g. when your own foreground dsh is on 3080.
+./up.sh 3080
+
+# Restart + verify only (skip deployment), or stop a dsh web instance.
+./up.sh --no-install 3080
+./up.sh --stop 3080
+
+# The underlying scripts remain available when you need only one action:
 ./install.sh
-
-# 2) Restart dsh process (lets sandbox patch + latest plugin code take effect)
-#    Stop `pnpm dsh web --port 3081` with Ctrl-C, then restart with --expose-internals
-#    for config HMR (plugin rows hot-reload on cordis.patch.yml edits):
-#    node --expose-internals --import tsx/esm apps/cli/src/bin.ts web --port 3081
-#    Or simply: ./restart.sh  (already includes --expose-internals)
-#    A restart is REQUIRED after the first install: the running process caches
-#    the failed preset-plugin module resolution until then.
-
-# 3) Refresh browser page
-#    New session: select the "mydsh 模式" preset in the sidebar
+./restart.sh
 ```
+
+`up.sh` starts dsh with `--expose-internals` by default so `cordis.patch.yml`
+plugin rows can hot-reload. Set `MYDSH_NO_HMR=1` for the hardened mode (then
+configuration changes require a manual restart). A restart is required after
+the first install because the running process caches failed preset-plugin
+module resolution until then.
 
 ### Install via dsh plugin command (community flow)
 
@@ -114,6 +122,7 @@ mydsh/
 ├── patches/                       # Sandbox + UA override patches + replay script
 ├── restart.sh                     # Restart dsh (setsid + --expose-internals)
 ├── install.sh                     # Idempotent deploy to $DSH_HOME
+├── up.sh                          # One-command deploy + restart + media verification
 ├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
 └── manifest.json                  # File → deploy target manifest
 ```
@@ -160,6 +169,7 @@ mydsh/
 │   ├── ui-notify/  ui-session-tabs/  ui-video/
 ├── patches/                       # sandbox 同模式升级补丁 + 重放脚本
 ├── install.sh                     # 幂等部署到 $DSH_HOME
+├── up.sh                          # 一键部署 + 重启 + media 边界验证
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
 └── manifest.json                  # 文件 → 部署目标清单
 ```
@@ -167,17 +177,26 @@ mydsh/
 ## 快速开始
 
 ```bash
-# 1) 部署（幂等，可重复执行）
+# 推荐：部署 + 重启 + media 安全边界验证一键完成。
+# 默认端口 3081（或 $DSH_WEB_PORT）；同端口已有 dsh web 时安全替换，
+# 非 dsh 进程占用时会拒绝停止，避免误杀。
+./up.sh
+
+# 例如：保留/替换运行在 3080 的 dsh web。
+./up.sh 3080
+
+# 只重启并验证（不部署），或只停止对应端口的 dsh web。
+./up.sh --no-install 3080
+./up.sh --stop 3080
+
+# 需要单独操作时，底层脚本仍可直接使用。
 ./install.sh
-
-# 2) 重启 dsh 进程（让 sandbox 补丁与最新插件代码生效）
-#    Ctrl-C 停掉 `pnpm dsh web --port 3081`，再重新启动即可；会话数据不丢。
-#    首次部署后重启是必须的：运行中的进程会缓存预设插件失败的模块解析，
-#    不重启则「mydsh 模式」仍无法新建会话。
-
-# 3) 浏览器刷新页面
-#    新会话：侧栏选择预设「mydsh 模式」
+./restart.sh
 ```
+
+`up.sh` 默认以 `--expose-internals` 启动，`cordis.patch.yml` 的插件行可热更。
+加固运行可设 `MYDSH_NO_HMR=1`（随后配置改动需手动重启）。首次部署后必须重启：
+运行中的进程会缓存预设插件失败的模块解析，不重启则「mydsh 模式」仍无法新建会话。
 
 验证：
 
