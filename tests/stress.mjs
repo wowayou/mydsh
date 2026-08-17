@@ -225,9 +225,12 @@ console.log('\n── D. vision-tool 并发调用 ──')
   visionTool.apply(ctxWithTools)
   const def = registered.find((t) => t.name === 'vision_describe')
   check('vision_describe 注册', def !== undefined)
-  // 并发 20 次：当前实现无节流，maxActive 应 = 20（无限制）
+  // 模拟 agent loop 注入的执行上下文：会话工作区 = TMP（测试图片写在 TMP 内）。
+  // 2026-08-17 起路径限制到工作区（防提示注入外渗），无 exec 会 fail closed。
+  const exec = { agent: { session: { header: { cwd: TMP } } } }
+  // 并发 20 次：信号量（maxConcurrency 默认 4）限制在飞调用数，maxActive ≤ 4。
   const N = 20
-  const outs = await Promise.all(Array.from({ length: N }, () => def.execute({ path: pngFile })))
+  const outs = await Promise.all(Array.from({ length: N }, () => def.execute({ path: pngFile }, exec)))
   check(`并发 ${N} 次 vision_describe 全部成功`, outs.length === N && outs.every((o) => typeof o === 'string' && o.includes('猫')))
   console.log(`  (streamCalls=${streamCalls}, maxActive=${maxActive})`)
   check('vision_describe 有并发限制 (maxActive<=4)', maxActive <= 4, `maxActive=${maxActive}`)
@@ -249,7 +252,7 @@ console.log('\n── D. vision-tool 并发调用 ──')
   }
   visionTool.apply(longCtx)
   const longDef = longRegistered.find((t) => t.name === 'vision_describe')
-  const longOut = await longDef.execute({ path: pngFile })
+  const longOut = await longDef.execute({ path: pngFile }, exec)
   check('超长返回截断到 maxChars=8000', longOut.length <= 8000 + 20 && longOut.length > 8000, `got ${longOut.length}`)
   check('截断有省略标记', longOut.endsWith('… [truncated]'), `末尾: ...${longOut.slice(-20)}`)
 }

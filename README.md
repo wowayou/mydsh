@@ -89,6 +89,15 @@ Per-provider UA takes priority over the global `DSH_APP_PRODUCT` env var.
 - `$DSH_HOME` set (defaults to `~/.dsh`)
 - Optional: `notify-send` for desktop notifications (Linux/Wayland)
 
+### Security model
+
+| Surface | Boundary |
+| --- | --- |
+| `/mydsh-media` route | Loopback-only (the harness rejects `--host 0.0.0.0`). Serves **only** files with a media extension (`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`); anything else is 404. Requests carrying an `Origin`/`Referer` must come from the dsh UI itself (same host + exact listening port). Requests **without** Origin (the `<video>` element's own load, local `curl`) are allowed — on loopback that equals the local user reading a media file. |
+| `vision_describe` | Image bytes leave the machine to the configured vision provider (that is the feature). Readable paths are contained to the **session workspace** plus optional `MYDSH_VISION_EXTRA_ROOTS` (`:`-separated absolute paths, `~` ok); symlinks are resolved (realpath) before the check. Every attempt, allowed or denied, is audited to `$DSH_HOME/mydsh/vision.jsonl` — a denied read is a prompt-injection trace. |
+| `restart.sh` | `--expose-internals` stays on by default (config HMR depends on it); `MYDSH_NO_HMR=1` runs hardened (config edits then need a manual restart). `PORT` must be an integer 0-65535. |
+| `install.sh` | Deploy commands run as arg arrays (no `eval`) — hostile `$DSH_HOME`/`$DSH_PROFILE` values can no longer inject commands. |
+
 ### Architecture
 
 ```
@@ -197,6 +206,15 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 - **批注**：悬停一条回复 → 点击「✎ 批注」；先选中回复里的文字会被自动摘录进批注。
 - **多标签**：会话头「⧉」一键新标签页打开本会话；手动访问 `http://127.0.0.1:3081/?session=<id>` 也可直达。侧栏底部「新建」按钮弹出工作区选择框，选定后在该工作区新建会话并新标签页打开。
 - **视频**：让模型在回复里写 `[demo.mp4](/绝对/路径/demo.mp4)` 这种链接，页面自动渲染播放器。
+
+## 安全模型（2026-08-17 收紧）
+
+| 面 | 边界 |
+| --- | --- |
+| `/mydsh-media` 路由 | 仅绑定 127.0.0.1（harness 拒绝 `--host 0.0.0.0`）。**只服务媒体扩展名**（`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`），其余一律 404。携带 `Origin`/`Referer` 的请求必须来自 dsh UI 自身（同源 + 精确监听端口）；无 Origin 的请求（`<video>` 元素自身的加载、本地 curl）放行——loopback 下等价于本机用户读媒体文件。 |
+| `vision_describe` | 图片字节会发往外部视觉 provider（功能本身）。可读路径限制在**会话工作区** + 可选 `MYDSH_VISION_EXTRA_ROOTS`（`:` 分隔绝对路径，支持 `~`）；先 realpath 再校验，防符号链接逃逸。每次调用（含被拒）审计到 `$DSH_HOME/mydsh/vision.jsonl`——被拒的读取即提示注入痕迹。 |
+| `restart.sh` | `--expose-internals` 默认保留（配置 HMR 依赖它）；`MYDSH_NO_HMR=1` 可加固运行（配置改动需手动重启）。`PORT` 强制 0-65535 整数。 |
+| `install.sh` | 部署命令以参数数组直接执行（不经 `eval`）——恶意 `$DSH_HOME`/`$DSH_PROFILE` 值无法再注入命令。 |
 
 ## 升级与维护
 

@@ -148,8 +148,10 @@ try {
   const mediaMod = await import(join(PROJECT, 'host/media.ts'))
   check('host/media.ts 导出 apply', typeof mediaMod.apply === 'function')
   let route = null
+  // fake webServer 带真实监听端口（3081）：精确 origin 校验（host+port）在
+  // 生产环境恒生效；这里让冒烟测试同时覆盖端口匹配与不匹配两条路径。
   mediaMod.apply({
-    get: (n) => (n === 'webServer' ? { register: (r) => { route = r; return () => {} } } : undefined),
+    get: (n) => (n === 'webServer' ? { register: (r) => { route = r; return () => {} }, port: 3081 } : undefined),
     effect: (fn) => { fn(); return () => {} },
   })
   check('host/media.ts 注册 /mydsh-media 路由', route && route.kind === 'prefix' && route.path === '/mydsh-media')
@@ -182,6 +184,23 @@ try {
   check('media 404 缺失文件', bad.statusCode === 404)
   const traversal = await call('/mydsh-media/%2Fetc%2Fpasswd%2Fextra')
   check('media 404 多段路径', traversal.statusCode === 404)
+
+  // ── 安全边界（2026-08-17）：扩展名白名单 + 精确 origin ──
+  // 非媒体扩展名一律 404（与缺失同码，不泄露存在性）。/etc/passwd 在 Linux
+  // 上真实存在——旧实现会返回 200 全文，现必须 404。
+  const secretTxt = joinPath(tmpdir(), 'mydsh-route-secret.txt')
+  writeFileSync(secretTxt, 'sensitive')
+  const nonMedia = await call(`/mydsh-media/${encodeURIComponent(secretTxt)}`)
+  check('media 404 非媒体扩展名', nonMedia.statusCode === 404, `${nonMedia.statusCode}`)
+  const passwd = await call('/mydsh-media/%2Fetc%2Fpasswd')
+  check('media 404 任意路径（/etc/passwd）', passwd.statusCode === 404, `${passwd.statusCode}`)
+  // 精确 origin：hostname 必须 127.0.0.1/localhost 且端口必须等于监听端口。
+  const evilOrigin = await call(`/mydsh-media/${enc}`, { origin: 'http://evil.com:3081' })
+  check('media 403 跨域 Origin', evilOrigin.statusCode === 403, `${evilOrigin.statusCode}`)
+  const wrongPort = await call(`/mydsh-media/${enc}`, { origin: 'http://127.0.0.1:8080' })
+  check('media 403 本地异端口 Origin', wrongPort.statusCode === 403, `${wrongPort.statusCode}`)
+  const okOrigin = await call(`/mydsh-media/${enc}`, { origin: 'http://localhost:3081' })
+  check('media 200 同源 Origin（localhost+端口）', okOrigin.statusCode === 200, `${okOrigin.statusCode}`)
 } catch (error) {
   check('主机插件加载', false, String(error && error.stack || error))
 }
@@ -221,19 +240,41 @@ try {
   const visionDef = registered.find((t) => t.name === 'vision_describe')
   check('vision_describe 工具注册', visionDef !== undefined)
   if (visionDef) {
-    const { writeFileSync } = await import('node:fs')
+    const { writeFileSync, mkdirSync, symlinkSync } = await import('node:fs')
     const { tmpdir } = await import('node:os')
     const { join: joinPath } = await import('node:path')
     const png = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
       'base64',
     )
-    const file = joinPath(tmpdir(), 'mydsh-smoke.png')
+    // 两个独立目录：cwdDir 模拟会话工作区，outside 在其外（同属 /tmp 但互不为子路径）。
+    const cwdDir = joinPath(tmpdir(), `mydsh-smoke-cwd-${process.pid}`)
+    const outside = joinPath(tmpdir(), `mydsh-smoke-outside-${process.pid}`)
+    mkdirSync(cwdDir, { recursive: true })
+    mkdirSync(outside, { recursive: true })
+    const file = joinPath(cwdDir, 'mydsh-smoke.png')
     writeFileSync(file, png)
-    const out = await visionDef.execute({ path: file, prompt: '这张图里有什么？' })
+    // 模拟 agent loop 注入的 ToolRunContext（exec.agent.session.header.cwd = 工作区）。
+    const exec = { agent: { session: { header: { cwd: cwdDir } } } }
+    const out = await visionDef.execute({ path: file, prompt: '这张图里有什么？' }, exec)
     check('vision_describe 返回描述', typeof out === 'string' && out.includes('猫'), out)
-    const bad = await visionDef.execute({ path: '/nonexistent/nope.png' })
+    const bad = await visionDef.execute({ path: '/nonexistent/nope.png' }, exec)
     check('vision_describe 缺失文件报错', typeof bad === 'string' && bad.startsWith('ERROR'), bad)
+
+    // ── 安全边界（2026-08-17）：路径限制到工作区，防提示注入外渗 ──
+    writeFileSync(joinPath(outside, 'secret.png'), png)
+    const denied = await visionDef.execute({ path: joinPath(outside, 'secret.png'), prompt: 'x' }, exec)
+    check('vision_describe 拒绝工作区外路径', typeof denied === 'string' && denied.startsWith('ERROR') && denied.includes('outside allowed roots'), denied)
+    process.env.MYDSH_VISION_EXTRA_ROOTS = outside
+    const viaEnv = await visionDef.execute({ path: joinPath(outside, 'secret.png'), prompt: 'x' }, exec)
+    check('vision_describe 允许 env 附加根', typeof viaEnv === 'string' && viaEnv.includes('猫'), viaEnv)
+    delete process.env.MYDSH_VISION_EXTRA_ROOTS
+    const link = joinPath(cwdDir, `escape-${process.pid}.png`)
+    symlinkSync(joinPath(outside, 'secret.png'), link)
+    const viaLink = await visionDef.execute({ path: link, prompt: 'x' }, exec)
+    check('vision_describe 拒绝符号链接逃逸', typeof viaLink === 'string' && viaLink.startsWith('ERROR'), viaLink)
+    const noExec = await visionDef.execute({ path: file, prompt: 'x' })
+    check('vision_describe 无会话上下文时 fail closed', typeof noExec === 'string' && noExec.startsWith('ERROR') && noExec.includes('no allowed root'), noExec)
   }
 } catch (error) {
   check('预设工具插件加载', false, String(error && error.stack || error))

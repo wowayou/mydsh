@@ -37,8 +37,16 @@ for arg in "$@"; do
 done
 
 say() { if [ "$DRY" -eq 1 ]; then echo "[dry] $*"; else echo "$*"; fi; }
+# 直接执行参数数组（不经 eval）：DSH_HOME/DSH_PROFILE 等环境变量里的单引号
+# 无法再逃逸出引号注入命令。dry-run 输出用 %q 保持与真实执行一致的引用显示。
 run() {
-  if [ "$DRY" -eq 1 ]; then echo "[dry]   $*"; else eval "$*"; fi
+  if [ "$DRY" -eq 1 ]; then
+    local out='' a
+    for a in "$@"; do out+="${out:+ }$(printf '%q' "$a")"; done
+    echo "[dry]   $out"
+  else
+    "$@"
+  fi
 }
 
 echo "== mydsh 部署 =="
@@ -49,22 +57,22 @@ echo
 
 # 1) Agent 预设（权威源 = preset/）
 say "1) 预设 → $PRESET_DIR"
-run "mkdir -p '$PRESET_DIR'"
-run "rsync -a --delete '$PROJECT/preset/' '$PRESET_DIR/'"
+run mkdir -p "$PRESET_DIR"
+run rsync -a --delete "$PROJECT/preset/" "$PRESET_DIR/"
 
 # 2) 主机层插件（权威源 = host/）
 say "2) 主机插件 → $HOST_PLUGIN_DIR"
-run "mkdir -p '$HOST_PLUGIN_DIR'"
-run "rsync -a --delete '$PROJECT/host/' '$HOST_PLUGIN_DIR/'"
+run mkdir -p "$HOST_PLUGIN_DIR"
+run rsync -a --delete "$PROJECT/host/" "$HOST_PLUGIN_DIR/"
 
 # 3) 客户端插件包（权威源 = client/）
 say "3) 客户端插件 → $CLIENT_ROOT"
-run "mkdir -p '$CLIENT_ROOT'"
+run mkdir -p "$CLIENT_ROOT"
 for pkg in "$PROJECT"/client/*/; do
   [ -d "$pkg" ] || continue
   name="$(basename "$pkg")"
-  run "rm -rf '$CLIENT_ROOT/$name'"
-  run "cp -r '$pkg' '$CLIENT_ROOT/$name'"
+  run rm -rf "$CLIENT_ROOT/$name"
+  run cp -r "$pkg" "$CLIENT_ROOT/$name"
 done
 
 # 3b) 预设本地插件依赖解析（幂等：符号链接指向 profile node_modules）
@@ -96,7 +104,7 @@ PATCH_BLOCK_START="# ==== mydsh begin (managed by install.sh, do not edit) ===="
 PATCH_BLOCK_END="# ==== mydsh end ===="
 
 say "4) patch 行 → $PATCH_FILE"
-run "mkdir -p '$PROFILE_DIR'"
+run mkdir -p "$PROFILE_DIR"
 if [ "$DRY" -eq 1 ]; then
   echo "[dry]   (改写 marker 块)"
 else
@@ -144,7 +152,7 @@ fi
 # 5) checkout 补丁（sandbox 同模式升级 no-op）
 if [ "$DO_PATCH" -eq 1 ]; then
   say "5) 应用 checkout 补丁"
-  run "bash '$PROJECT/patches/apply-patches.sh'"
+  run bash "$PROJECT/patches/apply-patches.sh"
 fi
 
 echo

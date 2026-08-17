@@ -158,6 +158,18 @@ node_modules——home 下永远到不了 harness 的依赖树，导入必崩。
 ### 决策 5：提示音设置放 Settings General
 理由：DSH 标准模式，所有偏好设置都放 settings.general.item。
 
+### 决策 6：收紧两个「模型指定本地读取 + 外部发送」面（2026-08-17）
+vision_describe 路径限制到会话工作区 + env 附加根（MYDSH_VISION_EXTRA_ROOTS）；
+/mydsh-media 服务端媒体扩展名白名单 + 精确 origin（host+port）。
+理由：提示注入是主要对手——模型可读的文件面 = 可被诱导外渗的数据面。
+工作区内的文件模型本来就能读（且其输出本来就发往外部 LLM），所以限制到
+工作区不损失能力，只砍掉「工作区外文件 + 免审批外发」的增量风险。
+附加根走环境变量而非 YAML config：本地插件行带 config 块而插件未导出运行时
+schemastery Config 会崩掉预设加载（坑 6）——不冒这个险。
+vision 无可用根时 fail closed，**不回退 process.cwd()**：dsh 进程 cwd 是
+harness checkout（restart.sh 先 cd 过去），可能含带密钥的 .env，回退反而
+扩大 read-only 会话的读取面。
+
 ## 给未来开发者的建议
 
 1. 先读 DSH 源码再写插件：slot 系统、host/preset/client 分层、PropsRuntime 标准 kit。
