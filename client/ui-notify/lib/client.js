@@ -27,6 +27,16 @@ window.__ModuleLoader__.load({
 		const { useEffect, useRef, useState, useCallback, createElement } = React;
 
 		var SOUND_KEY = 'mydsh.notify.sound';
+		/** 静音开关（localStorage）：为 '1' 时完成/打断都不发声，通知照发。 */
+		var MUTE_KEY = 'mydsh.notify.mute';
+		/**
+		 * 自定义提示音的体积上限（原始文件字节数）。
+		 * 为什么必须有上限：音频以 base64 data URL 存进 localStorage，而 localStorage 配额
+		 * 是**整个 origin 共享**的 —— dsh UI 自己的设置、草稿、其他插件都在同一份配额里。
+		 * 一个几 MB 的音频足以把配额吃满，让宿主 UI 的写入开始失败；那是本插件对别人的
+		 * 副作用，不是本插件自己的问题。提示音只需要一两秒，512 KiB 绰绰有余。
+		 */
+		var MAX_SOUND_BYTES = 512 * 1024;
 		/** Cross-tab claim window: within this many ms a fresh claim suppresses other tabs. */
 		var CLAIM_WINDOW_MS = 30000;
 		/** How long a hidden tab keeps the "[✓] <task>" title flash. */
@@ -42,14 +52,20 @@ window.__ModuleLoader__.load({
 			    pendingApproval: '等待审批', pendingPlan: '计划待审', pendingQuestion: '等待回答',
 			    soundLabel: '完成提示音', test: '试听',
 			    custom: '自定义音频', default: '默认提示音',
-			    upload: '选择文件', remove: '恢复默认' }
+			    upload: '选择文件', remove: '恢复默认',
+			    mute: '静音', unmute: '取消静音', mutedNote: '已静音（只弹通知，不发声）',
+			    tooBig: '文件过大：上限 512 KB', quotaFull: '保存失败：浏览器存储空间已满',
+			    readFailed: '保存失败：无法读取该音频文件' }
 			: { title: 'Task done', body: 'The session has finished', donePrefix: '✅',
 			    flashPrefix: '[✓]',
 			    pendingTitle: 'Needs your input', pendingPrefix: '⚠️',
 			    pendingApproval: 'Waiting for approval', pendingPlan: 'Plan awaiting review', pendingQuestion: 'Waiting for answer',
 			    soundLabel: 'Notification sound', test: 'Test',
 			    custom: 'Custom audio', default: 'Default beep',
-			    upload: 'Choose file', remove: 'Reset' };
+			    upload: 'Choose file', remove: 'Reset',
+			    mute: 'Mute', unmute: 'Unmute', mutedNote: 'Muted (notification only, no sound)',
+			    tooBig: 'File too large: 512 KB max', quotaFull: 'Save failed: browser storage is full',
+			    readFailed: 'Save failed: could not read that audio file' };
 
 		// ── 纯逻辑（可在 smoke 测试里直接驱动） ──────────────────────────────
 
@@ -122,13 +138,46 @@ window.__ModuleLoader__.load({
 		function loadCustomSound() {
 			try { return localStorage.getItem(SOUND_KEY); } catch { return null; }
 		}
+		/** 静音状态。读不到（隐私模式等）按「不静音」处理，保持既有行为。 */
+		function isMuted() {
+			try { return localStorage.getItem(MUTE_KEY) === '1'; } catch { return false; }
+		}
+		function setMuted(on) {
+			try { if (on) localStorage.setItem(MUTE_KEY, '1'); else localStorage.removeItem(MUTE_KEY); } catch {}
+		}
+		/**
+		 * 存自定义提示音，两道闸：
+		 *   1. 读之前先按 file.size 拒超限文件（大文件根本不读进内存）；
+		 *   2. setItem 抛 QuotaExceededError 时清掉半截值并 reject —— 调用方必须显示出来，
+		 *      不能吞掉：origin 配额是和宿主 UI 共享的，静默失败会让用户以为设置生效了。
+		 * reject 的 Error.code ∈ {'too-big','quota','read-failed'}，供 UI 分文案。
+		 */
 		function saveCustomSound(file) {
 			return new Promise(function(resolve, reject) {
+				var size = file && typeof file.size === 'number' ? file.size : 0;
+				if (size > MAX_SOUND_BYTES) {
+					var big = new Error('custom sound too large: ' + size + ' > ' + MAX_SOUND_BYTES);
+					big.code = 'too-big';
+					reject(big);
+					return;
+				}
 				var reader = new FileReader();
 				reader.onload = function() {
-					try { localStorage.setItem(SOUND_KEY, reader.result); resolve(); } catch(e) { reject(e); }
+					try {
+						localStorage.setItem(SOUND_KEY, reader.result);
+						resolve();
+					} catch (e) {
+						try { localStorage.removeItem(SOUND_KEY); } catch {}
+						var quota = new Error('localStorage rejected the custom sound (quota)');
+						quota.code = 'quota';
+						reject(quota);
+					}
 				};
-				reader.onerror = function() { reject(reader.error); };
+				reader.onerror = function() {
+					var bad = new Error('could not read the audio file');
+					bad.code = 'read-failed';
+					reject(bad);
+				};
 				reader.readAsDataURL(file);
 			});
 		}
@@ -152,7 +201,9 @@ window.__ModuleLoader__.load({
 			} catch {}
 		}
 
-		function playSound() {
+		/** 播放提示音。force=true 表示用户点了「试听」，静音状态下也响。 */
+		function playSound(force) {
+			if (!force && isMuted()) return;
 			var custom = loadCustomSound();
 			if (custom) {
 				try { var audio = new Audio(custom); audio.volume = 0.8; audio.play().catch(function() { beep(); }); return; }
@@ -383,23 +434,43 @@ window.__ModuleLoader__.load({
 			var state = useState(loadCustomSound());
 			var customUrl = state[0]; var setCustomUrl = state[1];
 			var hasCustom = customUrl !== null;
+			var errState = useState(null);
+			var err = errState[0]; var setErr = errState[1];
+			var muteState = useState(isMuted());
+			var muted = muteState[0]; var setMutedUi = muteState[1];
 
 			var onFile = useCallback(function(e) {
 				var file = e.target.files && e.target.files[0];
 				if (!file) return;
+				setErr(null);
 				saveCustomSound(file).then(function() {
 					setCustomUrl(loadCustomSound());
-					playSound();
-				}).catch(function() {});
+					playSound(true);
+				}).catch(function(e2) {
+					// 失败必须可见：静默 catch 会让用户以为换音成功了，
+					// 而 quota 失败还意味着 origin 存储已经紧张（宿主 UI 也会受影响）。
+					var code = e2 && e2.code;
+					setErr(code === 'too-big' ? T.tooBig : code === 'read-failed' ? T.readFailed : T.quotaFull);
+					setCustomUrl(loadCustomSound());
+					try { console.warn('[@mydsh/ui-notify] custom sound not saved:', e2 && e2.message); } catch {}
+				});
 				if (fileRef.current) fileRef.current.value = '';
 			}, []);
 
 			var onRemove = useCallback(function() {
 				clearCustomSound();
 				setCustomUrl(null);
+				setErr(null);
 			}, []);
 
-			var onTest = useCallback(function() { playSound(); }, []);
+			var onTest = useCallback(function() { playSound(true); }, []);
+
+			// 静音开关：不想听声音的人不必卸插件（通知本身还在）。
+			var onMute = useCallback(function() {
+				var next = !isMuted();
+				setMuted(next);
+				setMutedUi(next);
+			}, []);
 
 			var rowStyle = {
 				display: 'flex', alignItems: 'center', gap: '8px', padding: '16px 0',
@@ -415,8 +486,13 @@ window.__ModuleLoader__.load({
 			};
 			var subtitleStyle = {
 				fontSize: '12px', lineHeight: '18px',
-				color: hasCustom ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)',
+				color: err !== null
+					? 'var(--dsw-alias-state-warn-primary)'
+					: hasCustom ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-label-tertiary)',
 			};
+			var subtitleText = err !== null
+				? err
+				: muted ? T.mutedNote : hasCustom ? T.custom : T.default;
 			// 设置行操作按钮：对齐 DSH Button ghost（Button.module.css）——
 			//   h36 / r18 / pad 0 14 / gap 4 / 14-22 / transparent + hover interactive-bg-hover。
 			var buttonBase = {
@@ -465,15 +541,47 @@ window.__ModuleLoader__.load({
 			return createElement('div', { style: rowStyle },
 				createElement('div', { style: textSectionStyle },
 					createElement('div', { style: titleStyle }, T.soundLabel),
-					createElement('div', { style: subtitleStyle }, hasCustom ? T.custom : T.default),
+					createElement('div', { style: subtitleStyle }, subtitleText),
 				),
 				// Upload button（ghost 视觉，label 包 file input）
 				createElement(UploadLabel, {}, T.upload),
-				// Test button（ghost）
+				// Test button（ghost）：显式试听，静音时也响
 				createElement(GhostBtn, { onClick: onTest }, T.test),
+				// Mute toggle（ghost）：静音后只弹通知不发声
+				createElement(GhostBtn, { onClick: onMute }, muted ? T.unmute : T.mute),
 				// Reset button（ghost，warn 色；仅自定义时有）
 				hasCustom ? createElement(GhostBtn, { onClick: onRemove, danger: true }, T.remove) : null,
 			);
+		}
+
+		// ── 重复挂载防护 ───────────────────────────────────────────────────
+		// 两条安装路径都走一遍（仓库 install.sh 往 profile 的 cordis.patch.yml 写行 +
+		// npm 包自带的 bundle patch 层），组合后的 loader tree 里就会有两行同 id 的插件行：
+		// apply() 跑两次 → 两份监听器 → 一次完成响两声、设置里出现两行。别人安装时最容易
+		// 踩这个，所以插件自己兜住：第二份只打一条能照着做的警告然后退出。
+		var MOUNT_KEY = '__mydshUiNotifyMounts';
+
+		/** 认领本进程内的唯一挂载权；返回 false 表示自己是重复的那份。 */
+		function claimMount(ctx) {
+			var g = typeof window !== 'undefined' ? window : globalThis;
+			var n = (g[MOUNT_KEY] || 0) + 1;
+			g[MOUNT_KEY] = n;
+			// 计数跟着插件生命周期回落，HMR / 卸载重挂不会假报重复。
+			ctx.effect(function() {
+				return function() { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); };
+			}, '@mydsh/ui-notify: mount counter');
+			if (n > 1) {
+				try {
+					console.warn(
+						'[@mydsh/ui-notify] mounted ' + n + ' times — the plugin row appears more than once in '
+						+ 'the composed tree, so this copy registered nothing. Keep ONE install path: either the npm '
+						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-notify`) or the mydsh repo rows in '
+						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
+					);
+				} catch {}
+				return false;
+			}
+			return true;
 		}
 
 		module.exports = {
@@ -482,7 +590,17 @@ window.__ModuleLoader__.load({
 			apply(ctx) {
 				var sessions = ctx.get('sessions');
 				var slots = ctx.get('slots');
-				if (slots === undefined) return;
+				if (slots === undefined) {
+					// 静默 return 会让「装上了但什么都没发生」无从排查（例如宿主重命名了服务）。
+					try {
+						console.warn(
+							'[@mydsh/ui-notify] the host exposes no `slots` service — nothing was registered. '
+							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
+						);
+					} catch {}
+					return;
+				}
+				if (!claimMount(ctx)) return;
 				ctx.effect(
 					() => slots.inject('conversation.input.dock', () => slots.register({
 						name: 'conversation.input.dock',
@@ -501,7 +619,9 @@ window.__ModuleLoader__.load({
 				);
 			},
 			// 供 tests/smoke.mjs 直接驱动的纯逻辑（不参与运行时）。
-			__test: { makeScanner, claimEdge, displayLabelOf, shortIdOf },
+			__test: { makeScanner, claimEdge, displayLabelOf, shortIdOf,
+			          saveCustomSound, loadCustomSound, clearCustomSound, isMuted, setMuted, playSound,
+			          MAX_SOUND_BYTES, SOUND_KEY, MUTE_KEY },
 		};
 		return module.exports;
 	}

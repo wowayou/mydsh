@@ -2,6 +2,24 @@
   "name": "@mydsh/ui-notify",
   "version": "0.1.0",
   "description": "mydsh: browser completion notification — Notification API + sound when an agent turn finishes while the tab is hidden",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "dsh-client-plugin",
+    "notification",
+    "mydsh"
+  ],
+  "homepage": "https://github.com/wowayou/mydsh/tree/main/client/ui-notify#readme",
+  "bugs": "https://github.com/wowayou/mydsh/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wowayou/mydsh.git",
+    "directory": "client/ui-notify"
+  },
+  "license": "MIT",
+  "author": "wowayou",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -9,10 +27,21 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web"
     }
   },
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public"
+  }
 }

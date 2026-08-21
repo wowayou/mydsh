@@ -2,6 +2,26 @@
   "name": "@mydsh/ui-session-tabs",
   "version": "0.1.0",
   "description": "mydsh: open a session in a new browser tab via ?session=<id> deep links — each tab keeps its own selected session",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "dsh-client-plugin",
+    "session",
+    "tabs",
+    "deep-link",
+    "mydsh"
+  ],
+  "homepage": "https://github.com/wowayou/mydsh/tree/main/client/ui-session-tabs#readme",
+  "bugs": "https://github.com/wowayou/mydsh/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wowayou/mydsh.git",
+    "directory": "client/ui-session-tabs"
+  },
+  "license": "MIT",
+  "author": "wowayou",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -9,10 +29,21 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web"
     }
   },
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public"
+  }
 }

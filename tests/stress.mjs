@@ -222,7 +222,9 @@ console.log('\n── D. vision-tool 并发调用 ──')
     tools: { register: (t) => { registered.push(t); return () => {} } },
   }
   const visionTool = await import(join(PROJECT, 'preset/plugins/vision-tool.ts'))
-  visionTool.apply(ctxWithTools)
+  // cache: false —— 本段测并发与截断，反复用同一张图 + 同一默认 prompt；
+  // 结果缓存（2026-08-21 起共用 lib/vision-core.mjs）会把后续调用短路掉。
+  visionTool.apply(ctxWithTools, { cache: false })
   const def = registered.find((t) => t.name === 'vision_describe')
   check('vision_describe 注册', def !== undefined)
   // 模拟 agent loop 注入的执行上下文：会话工作区 = TMP（测试图片写在 TMP 内）。
@@ -250,7 +252,7 @@ console.log('\n── D. vision-tool 并发调用 ──')
     }[n]),
     tools: { register: (t) => { longRegistered.push(t); return () => {} } },
   }
-  visionTool.apply(longCtx)
+  visionTool.apply(longCtx, { cache: false })
   const longDef = longRegistered.find((t) => t.name === 'vision_describe')
   const longOut = await longDef.execute({ path: pngFile }, exec)
   check('超长返回截断到 maxChars=8000', longOut.length <= 8000 + 20 && longOut.length > 8000, `got ${longOut.length}`)
@@ -302,23 +304,30 @@ console.log('\n── E. ui-video 生命周期（旁路隐患）──')
     effect: (fn) => { const d = fn(); savedDisposers.push(d); return d ?? (() => {}) },
   }
   // 第一次 apply：应创建 1 个 observer，并注册 disposer
+  //（apply 现在先注册一个「挂载计数」effect，再注册 observer effect —— 计数用于
+  //  发现「仓库部署行 + npm bundle 层」两条安装路径都装的重复挂载。）
   plugin.apply(fakeCtx)
   check('首次 apply 创建 1 个 observer', observerCreated === 1, `got ${observerCreated}`)
-  check('首次 apply 注册了 disposer', savedDisposers.length === 1, `got ${savedDisposers.length}`)
-  // 第二次 apply：started 标志位阻止重入，不创建新 observer
+  check('首次 apply 注册了 disposer（挂载计数 + observer）', savedDisposers.length === 2, `got ${savedDisposers.length}`)
+  check('挂载计数记为 1', window.__mydshUiVideoMounts === 1, `got ${window.__mydshUiVideoMounts}`)
+  // 第二次 apply = 重复安装：挂载防护拦住，不创建第二个 observer（否则 DOM 被扫两遍）
   plugin.apply(fakeCtx)
-  check('多次 apply 不重复创建 observer', observerCreated === 1, `got ${observerCreated}`)
+  check('重复 apply 不创建第二个 observer', observerCreated === 1, `got ${observerCreated}`)
+  check('重复 apply 被挂载防护识别', window.__mydshUiVideoMounts === 2, `got ${window.__mydshUiVideoMounts}`)
   // 关键检查：disposer 走 ctx.effect（修复后），不再旁路到 window 全局变量。
   const hasEffectCall = code.includes('ctx.effect')
   check('ui-video 走 ctx.effect 生命周期', hasEffectCall, `代码中 ctx.effect=${hasEffectCall ? '有' : '无'}`)
   // 验证修复后不再有 window.__mydshVideoDispose 全局变量
   check('不再旁路到 window.__mydshVideoDispose', typeof window.__mydshVideoDispose === 'undefined', `dispose=${typeof window.__mydshVideoDispose}`)
-  // 模拟框架卸载：调用 disposer，应断开 observer 并重置 started
-  savedDisposers[0]()
+  // 模拟框架卸载：调用所有 disposer，应断开 observer、挂载计数回落到 0
+  for (const d of savedDisposers) if (typeof d === 'function') d()
   check('disposer 调用后 observer 被断开', observerDisconnected === 1, `got ${observerDisconnected}`)
-  // 卸载后重新 apply 应能重新创建 observer（started 已重置）
+  check('卸载后挂载计数回落', window.__mydshUiVideoMounts === 0, `got ${window.__mydshUiVideoMounts}`)
+  // 卸载后重新 apply 应能重新创建 observer（started 与计数都已重置 → HMR 不会假报重复）
+  savedDisposers = []
   plugin.apply(fakeCtx)
   check('卸载后重新 apply 创建新 observer', observerCreated === 2, `got ${observerCreated}`)
+  check('重挂载不误报重复', window.__mydshUiVideoMounts === 1, `got ${window.__mydshUiVideoMounts}`)
 }
 
 // ── F. ui-notify scanner 大量会话性能 ───────────────────────────────────

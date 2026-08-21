@@ -2,6 +2,26 @@
   "name": "@mydsh/ui-video",
   "version": "0.1.0",
   "description": "mydsh: render local video/audio files referenced in messages as playable <video>/<audio> via the /mydsh-media host route",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "dsh-client-plugin",
+    "video",
+    "audio",
+    "media",
+    "mydsh"
+  ],
+  "homepage": "https://github.com/wowayou/mydsh/tree/main/client/ui-video#readme",
+  "bugs": "https://github.com/wowayou/mydsh/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wowayou/mydsh.git",
+    "directory": "client/ui-video"
+  },
+  "license": "MIT",
+  "author": "wowayou",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -9,10 +29,21 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web"
     }
   },
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public"
+  }
 }

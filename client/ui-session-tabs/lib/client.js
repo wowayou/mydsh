@@ -450,6 +450,35 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		// ── 重复挂载防护 ───────────────────────────────────────────────────
+		// 两条安装路径都走一遍（仓库 install.sh 写 profile 的 cordis.patch.yml + npm 包
+		// 自带的 bundle patch 层），组合后的 loader tree 里就会有两行同 id 的插件行：
+		// 会话头出现两个「⧉」、侧栏底两个「新建会话」、?session= 深链被打开两次。
+		// 别人安装时最容易踩这个，所以插件自己兜住：第二份只警告，不注册。
+		var MOUNT_KEY = '__mydshUiSessionTabsMounts';
+
+		/** 认领本进程内的唯一挂载权；返回 false 表示自己是重复的那份。 */
+		function claimMount(ctx) {
+			var g = typeof window !== 'undefined' ? window : globalThis;
+			var n = (g[MOUNT_KEY] || 0) + 1;
+			g[MOUNT_KEY] = n;
+			ctx.effect(function() {
+				return function() { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); };
+			}, '@mydsh/ui-session-tabs: mount counter');
+			if (n > 1) {
+				try {
+					console.warn(
+						'[@mydsh/ui-session-tabs] mounted ' + n + ' times — the plugin row appears more than once in '
+						+ 'the composed tree, so this copy registered nothing. Keep ONE install path: either the npm '
+						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-session-tabs`) or the mydsh repo rows in '
+						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
+					);
+				} catch {}
+				return false;
+			}
+			return true;
+		}
+
 		module.exports = {
 			name: '@mydsh/ui-session-tabs',
 			inject: ['slots', 'sessions', 'workspaces'],
@@ -457,7 +486,17 @@ window.__ModuleLoader__.load({
 				var sessions = ctx.get('sessions');
 				var workspaces = ctx.get('workspaces');
 				var slots = ctx.get('slots');
-				if (slots === undefined) return;
+				if (slots === undefined) {
+					// 静默 return 会让「装上了但什么都没发生」无从排查（例如宿主重命名了服务）。
+					try {
+						console.warn(
+							'[@mydsh/ui-session-tabs] the host exposes no `slots` service — nothing was registered. '
+							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
+						);
+					} catch {}
+					return;
+				}
+				if (!claimMount(ctx)) return;
 				// 1. "Open in new tab" button in session header actions (three dots area)
 				ctx.effect(
 					() => slots.inject('conversation.session.header.actions', () => slots.register({

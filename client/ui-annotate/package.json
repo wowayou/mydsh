@@ -1,7 +1,25 @@
 {
   "name": "@mydsh/ui-annotate",
-  "version": "0.1.0",
-  "description": "mydsh: codex-like annotations on assistant replies — select text in a reply, attach a note; stored per message in localStorage",
+  "version": "0.1.0-preview.1",
+  "description": "mydsh (PREVIEW, not deployed by install.sh): codex-like annotations on assistant replies — notes live in localStorage only and are NOT visible to the model",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "cordis-plugin",
+    "dsh-client-plugin",
+    "annotation",
+    "mydsh"
+  ],
+  "homepage": "https://github.com/wowayou/mydsh/tree/main/client/ui-annotate#readme",
+  "bugs": "https://github.com/wowayou/mydsh/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wowayou/mydsh.git",
+    "directory": "client/ui-annotate"
+  },
+  "license": "MIT",
+  "author": "wowayou",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -9,10 +27,22 @@
     "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web"
     }
   },
-  "license": "MIT"
+  "publishConfig": {
+    "access": "public",
+    "tag": "preview"
+  }
 }

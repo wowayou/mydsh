@@ -46,7 +46,44 @@ configuration changes require a manual restart). A restart is required after
 the first install because the running process caches failed preset-plugin
 module resolution until then.
 
-### Install via dsh plugin command (community flow)
+### Install the browser plugins from npm (community flow)
+
+The four browser plugins are standalone npm packages. Each one declares
+`dsh.bundle.patch`, so `dsh plugin` installs it into the profile *and* activates its
+plugin row — no YAML editing:
+
+```bash
+dsh plugin --profile web add @mydsh/ui-notify
+dsh plugin --profile web add @mydsh/ui-session-tabs
+dsh plugin --profile web add @mydsh/ui-video          # needs the host media route, see below
+dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview: notes are localStorage-only
+
+# pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w
+# verify: dsh --profile web --dump-config | grep mydsh
+```
+
+| Package | What it is | Extra requirement |
+| --- | --- | --- |
+| [`@mydsh/ui-notify`](client/ui-notify) | Completion notification + sound, works in background tabs | — |
+| [`@mydsh/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` deep links, one session per tab, new-session-in-new-tab | — |
+| [`@mydsh/ui-video`](client/ui-video) | Local video/audio links become players | host `/mydsh-media` route (`host/media.ts`, repo install) |
+| [`@mydsh/ui-annotate`](client/ui-annotate) | Notes on assistant replies | preview — model cannot see the notes |
+
+**Pick one path, not both.** `./install.sh` writes the same plugin rows into
+`$DSH_HOME/profiles/web/cordis.patch.yml` directly. Doing both puts two rows with the same
+id in the composed tree (verified with `--dump-config`), i.e. the plugin mounts twice.
+Installing from npm? Drop the `# ==== mydsh begin/end ====` block from your profile patch first.
+Each bundle also guards itself: the duplicate copy registers nothing and logs one
+`console.warn` naming the fix, so you never get two notifications for one completion.
+
+What the packages promise an installer (they run on **your** page, so this is the contract):
+no network, no telemetry, no `postinstall`, no host code patched or wrapped; the only storage
+is `localStorage` under `mydsh.*`, size-capped so the origin quota shared with the dsh UI
+cannot be exhausted; a missing UI slot or service degrades to one `console.warn`; every
+package documents the dsh version it was verified against (`0.1.0-rc.5`) and its uninstall
+command. `@mydsh/ui-annotate` is `preview` on purpose — read its README first.
+
+### Install everything from the repo (host plugins, preset, skill)
 
 ```bash
 # Clone and deploy
@@ -104,8 +141,8 @@ Per-provider UA takes priority over the global `DSH_APP_PRODUCT` env var.
 | Surface | Boundary |
 | --- | --- |
 | `/mydsh-media` route | Loopback-only (the harness rejects `--host 0.0.0.0`). Serves **only** files with a media extension (`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`); anything else is 404. Requests carrying an `Origin`/`Referer` must come from the dsh UI itself (same host + exact listening port). Requests **without** Origin (the `<video>` element's own load, local `curl`) are allowed — on loopback that equals the local user reading a media file. |
-| `vision_describe` | Image bytes leave the machine to the configured vision provider (that is the feature). Readable paths are contained to the **session workspace** plus optional `MYDSH_VISION_EXTRA_ROOTS` (`:`-separated absolute paths, `~` ok); symlinks are resolved (realpath) before the check. Every attempt, allowed or denied, is audited to `$DSH_HOME/mydsh/vision.jsonl` — a denied read is a prompt-injection trace. |
-| `skills/vision` CLI | Same containment shape: roots are the **cwd** plus `MYDSH_VISION_EXTRA_ROOTS`, or a pinned `MYDSH_VISION_ROOTS` that command-line args cannot widen; realpath before the root check, and the extension check runs on the real path. The API key is read from `$DSH_HOME/.credentials.yaml` by the CLI itself — it never enters the model's shell, the transcript, or the audit log. Audited to the same `vision.jsonl` with `via: skill-cli`. **Honest caveat**: DSH's `SandboxMode` governs file effects only, not network/process, so this is a guardrail plus forensic trail, not an exfiltration boundary. |
+| `vision_describe` | Image bytes leave the machine to the configured vision provider (that is the feature). Readable paths are contained to the **session workspace** plus optional `MYDSH_VISION_EXTRA_ROOTS` (`:`-separated absolute paths, `~` ok), or a pinned `MYDSH_VISION_ROOTS` that overrides the workspace; symlinks are resolved (realpath) before the check, and the type check runs on the real path. Every attempt, allowed or denied, is audited to `$DSH_HOME/mydsh/vision.jsonl` with `via: preset-tool` — a denied read is a prompt-injection trace. The containment, media preparation (PDF pages / video frames), result cache and audit all come from one shared `lib/vision-core.mjs`, identical to the skill CLI's. |
+| `skills/vision` CLI | Same containment code (`lib/vision-core.mjs`), different base root: **cwd** plus `MYDSH_VISION_EXTRA_ROOTS`, or a pinned `MYDSH_VISION_ROOTS` that command-line args cannot widen; realpath before the root check, and the extension check runs on the real path. The API key is read from `$DSH_HOME/.credentials.yaml` by the CLI itself — it never enters the model's shell, the transcript, or the audit log. Audited to the same `vision.jsonl` with `via: skill-cli`. **Honest caveat**: DSH's `SandboxMode` governs file effects only, not network/process, so this is a guardrail plus forensic trail, not an exfiltration boundary. |
 | `restart.sh` | `--expose-internals` stays on by default (config HMR depends on it); `MYDSH_NO_HMR=1` runs hardened (config edits then need a manual restart). `PORT` must be an integer 0-65535. |
 | `install.sh` | Deploy commands run as arg arrays (no `eval`) — hostile `$DSH_HOME`/`$DSH_PROFILE` values can no longer inject commands. |
 
@@ -120,6 +157,7 @@ mydsh/
 │   ├── agent.cordis.yml           #   Composition (persona + two private tool rows)
 │   └── plugins/{notify-tool,vision-tool}.ts
 ├── skills/vision/                 # Skill: SKILL.md + scripts/dsh-vision.mjs (zero-dep CLI)
+├── lib/vision-core.mjs            # Shared vision core (containment / media prep / cache / audit)
 ├── host/{notify,media}.ts         # Host plugins (notification listener / local media route)
 ├── client/                        # Browser plugins (handwritten __ModuleLoader__ bundles, zero build deps)
 │   ├── ui-notify/  ui-session-tabs/  ui-video/
@@ -129,6 +167,7 @@ mydsh/
 ├── up.sh                          # One-command deploy + restart + media verification
 ├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
 ├── tests/vision-cli.mjs           # Vision skill CLI tests (plain `node`, no harness deps)
+├── tests/npm-packages.mjs         # npm packaging checks for the four @mydsh client packages
 └── manifest.json                  # File → deploy target manifest
 ```
 
@@ -137,6 +176,13 @@ mydsh/
 > preset's local plugin files (`./plugins/*.ts`) can resolve `@deepseek-ai/*`
 > imports from their home-directory location (a preset-local plugin's bare
 > imports resolve from the preset dir, not from the harness).
+
+> Shared-core note: `lib/vision-core.mjs` is the single authoritative copy of the
+> vision containment / media prep / cache / audit logic. The two consumer sites
+> (`preset/plugins/lib/` and `skills/vision/scripts/lib/`) hold **symlinks** to it in
+> the repo; `install.sh` rsyncs with `--copy-unsafe-links` so each deployed tree gets a
+> real file and never depends on the repo staying in place. `tests/check-preset.mjs`
+> asserts that invariant.
 
 ---
 
@@ -171,6 +217,7 @@ mydsh/
 │   ├── agent.cordis.yml           #   组合（persona + 两个私有工具行）
 │   └── plugins/{notify-tool,vision-tool}.ts
 ├── skills/vision/                 # 技能：SKILL.md + scripts/dsh-vision.mjs（零依赖 CLI）
+├── lib/vision-core.mjs            # 视觉共用核心（路径限制/素材准备/缓存/审计，预设与技能同源）
 ├── host/{notify,media}.ts         # 主机层插件（通知监听 / 本地媒体路由）
 ├── client/                        # 浏览器插件（手写 __ModuleLoader__ bundle，零构建依赖）
 │   ├── ui-notify/  ui-session-tabs/  ui-video/
@@ -179,6 +226,7 @@ mydsh/
 ├── up.sh                          # 一键部署 + 重启 + media 边界验证
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
 ├── tests/vision-cli.mjs           # 视觉技能 CLI 测试（纯 node，不依赖 harness）
+├── tests/npm-packages.mjs         # 四个 @mydsh 客户端包的 npm 打包校验（纯 node）
 └── manifest.json                  # 文件 → 部署目标清单
 ```
 
@@ -221,10 +269,50 @@ node /home/forbackup/Dev/mydsh/tests/check-preset.mjs
 # 视觉技能 CLI 测试（纯 node 即可，CLI 零依赖；内含本地假 provider）
 node /home/forbackup/Dev/mydsh/tests/vision-cli.mjs
 
+# 浏览器插件 npm 打包校验（纯 node；dsh.bundle.patch / files / 行 id 与 install.sh 一致性）
+node /home/forbackup/Dev/mydsh/tests/npm-packages.mjs
+
 # sandbox 补丁单测
 cd /home/forbackup/deepseek-harness
 pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 ```
+
+## 浏览器插件（npm 安装）
+
+四个浏览器插件是独立 npm 包，各自带 `dsh.bundle.patch`（包内 `cordis.patch.yml`），
+所以 `dsh plugin` 装完即生效，不用手改 YAML：
+
+```bash
+dsh plugin --profile web add @mydsh/ui-notify
+dsh plugin --profile web add @mydsh/ui-session-tabs
+dsh plugin --profile web add @mydsh/ui-video              # 需要主机层媒体路由，见下
+dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview：批注只存 localStorage
+
+# pnpm 9 会拒绝往 workspace root 加依赖（ERR_PNPM_ADDING_TO_ROOT）→ 加 -w
+# 验证：dsh --profile web --dump-config | grep mydsh
+```
+
+| 包 | 是什么 | 额外前提 |
+| --- | --- | --- |
+| [`@mydsh/ui-notify`](client/ui-notify) | 完成提醒 + 提示音（后台标签页也响） | — |
+| [`@mydsh/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` 深链、每标签页各选各的会话、新标签页新建会话 | — |
+| [`@mydsh/ui-video`](client/ui-video) | 消息里的本地媒体链接渲染成播放器 | 主机层 `/mydsh-media` 路由（`host/media.ts`，走仓库部署） |
+| [`@mydsh/ui-annotate`](client/ui-annotate) | 助手回复批注 | preview —— 模型看不见批注 |
+
+**两条路径只选一条。** `./install.sh` 会把同样的插件行直接写进
+`$DSH_HOME/profiles/web/cordis.patch.yml`；两条都走 → 组合后的 tree 里同一个 id 出现两行
+（已用 `--dump-config` 实测），插件会挂载两次。要走 npm 的话，先把 profile patch 里
+`# ==== mydsh begin/end ====` 这个 marker 块删掉。每个 bundle 自己也兜住了这一层：
+重复的那份不注册任何东西，只打一条告警说明该去掉哪条 —— 不会一次完成响两声。
+
+**对安装者的承诺**（这些代码跑在别人的页面上）：不联网、无遥测、无 `postinstall`、
+不改也不包宿主代码；只用 `mydsh.*` 的 `localStorage` 键且都有体积上限（origin 配额是和
+dsh UI 共享的，不能被插件吃满）；拿不到 UI 槽位/服务时退化成一条 `console.warn`；
+每个包都写明验证过的 dsh 版本（`0.1.0-rc.5`）与卸载命令。`@mydsh/ui-annotate` 故意留在
+`preview`，装之前先读它的 README。
+
+主机插件 / 预设 / 技能仍然只从仓库装（`./install.sh`）—— 它们要落到 `$DSH_HOME` 的
+不同位置，不是 npm 包的形态。
 
 ## 使用提示
 
@@ -252,8 +340,8 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 | 面 | 边界 |
 | --- | --- |
 | `/mydsh-media` 路由 | 仅绑定 127.0.0.1（harness 拒绝 `--host 0.0.0.0`）。**只服务媒体扩展名**（`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`），其余一律 404。携带 `Origin`/`Referer` 的请求必须来自 dsh UI 自身（同源 + 精确监听端口）；无 Origin 的请求（`<video>` 元素自身的加载、本地 curl）放行——loopback 下等价于本机用户读媒体文件。 |
-| `vision_describe` | 图片字节会发往外部视觉 provider（功能本身）。可读路径限制在**会话工作区** + 可选 `MYDSH_VISION_EXTRA_ROOTS`（`:` 分隔绝对路径，支持 `~`）；先 realpath 再校验，防符号链接逃逸。每次调用（含被拒）审计到 `$DSH_HOME/mydsh/vision.jsonl`——被拒的读取即提示注入痕迹。 |
-| `skills/vision` CLI | 同构的路径限制：默认根 = **cwd** + `MYDSH_VISION_EXTRA_ROOTS`；`MYDSH_VISION_ROOTS` 一旦设置即权威，命令行无法扩大（硬边界开关）。先 realpath 再比对根，扩展名判定也落在真实路径上。密钥由 CLI 自己从 `$DSH_HOME/.credentials.yaml` 读——不进模型的 shell、不进对话、不进审计。审计写同一份 `vision.jsonl`（带 `via: skill-cli`）。**诚实说明**：DSH 的 `SandboxMode` 只管文件效果，不管网络与进程，所以这层是护栏 + 取证，不是外渗边界。 |
+| `vision_describe` | 图片字节会发往外部视觉 provider（功能本身）。可读路径限制在**会话工作区** + 可选 `MYDSH_VISION_EXTRA_ROOTS`（`:` 分隔绝对路径，支持 `~`）；`MYDSH_VISION_ROOTS` 一旦设置即权威根（工作区不再自动加入）。先 realpath 再校验，防符号链接逃逸，类型判定落在真实路径上。每次调用（含被拒）审计到 `$DSH_HOME/mydsh/vision.jsonl`（带 `via: preset-tool`）——被拒的读取即提示注入痕迹。路径限制 / 素材准备（PDF 页、视频帧）/ 结果缓存 / 审计 与技能 CLI 共用同一份 `lib/vision-core.mjs`。 |
+| `skills/vision` CLI | 同一份路径限制代码（`lib/vision-core.mjs`），只是基准根不同：默认 = **cwd** + `MYDSH_VISION_EXTRA_ROOTS`；`MYDSH_VISION_ROOTS` 一旦设置即权威，命令行无法扩大（硬边界开关）。先 realpath 再比对根，扩展名判定也落在真实路径上。密钥由 CLI 自己从 `$DSH_HOME/.credentials.yaml` 读——不进模型的 shell、不进对话、不进审计。审计写同一份 `vision.jsonl`（带 `via: skill-cli`）。**诚实说明**：DSH 的 `SandboxMode` 只管文件效果，不管网络与进程，所以这层是护栏 + 取证，不是外渗边界。 |
 | `restart.sh` | `--expose-internals` 默认保留（配置 HMR 依赖它）；`MYDSH_NO_HMR=1` 可加固运行（配置改动需手动重启）。`PORT` 强制 0-65535 整数。 |
 | `install.sh` | 部署命令以参数数组直接执行（不经 `eval`）——恶意 `$DSH_HOME`/`$DSH_PROFILE` 值无法再注入命令。 |
 

@@ -197,8 +197,10 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
   }
   const ctxWithTools = { ...fakeCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
 
+  // 本段所有实例都 cache: false —— 下面的用例反复用同一张图 + 同一 prompt 去走
+  // 不同的错误路径，结果缓存会把它们短路掉（缓存本身在 9) 里单独测）。
   const visionTool = await import(join(PROJECT, 'preset/plugins/vision-tool.ts'))
-  visionTool.apply(ctxWithTools, { maxConcurrency: 2, maxChars: 100 })
+  visionTool.apply(ctxWithTools, { maxConcurrency: 2, maxChars: 100, cache: false })
   const visionDef = registered.find((t) => t.name === 'vision_describe')
   check('vision_describe 注册', visionDef !== undefined)
 
@@ -243,7 +245,7 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
     }[n]),
   }
   const longCtxWithTools = { ...longCtx2, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
-  visionTool.apply(longCtxWithTools, { maxConcurrency: 1, maxChars: 50 })
+  visionTool.apply(longCtxWithTools, { maxConcurrency: 1, maxChars: 50, cache: false })
   const longDef = registered.find((t) => t.name === 'vision_describe' && registered.indexOf(t) === registered.length - 1)
   const longResult = await longDef.execute({ path: imgFile, prompt: '描述' }, exec)
   check('超长截断到 maxChars=50 + 标记', longResult.length > 50 && longResult.length <= 70 && longResult.includes('…'), `len=${longResult.length}`)
@@ -258,7 +260,7 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
     }[n]),
   }
   const errorCtxWithTools = { ...errorCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
-  visionTool.apply(errorCtxWithTools, { maxConcurrency: 1 })
+  visionTool.apply(errorCtxWithTools, { maxConcurrency: 1, cache: false })
   const errorDef = registered[registered.length - 1]
   const errorResult = await errorDef.execute({ path: imgFile, prompt: '描述' }, exec)
   check('LLM 异常返回 ERROR', typeof errorResult === 'string' && errorResult.startsWith('ERROR') && errorResult.includes('LLM boom'), errorResult)
@@ -275,7 +277,7 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
     }[n]),
   }
   const finishErrorCtxWithTools = { ...finishErrorCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
-  visionTool.apply(finishErrorCtxWithTools, { maxConcurrency: 1 })
+  visionTool.apply(finishErrorCtxWithTools, { maxConcurrency: 1, cache: false })
   const finishErrorDef = registered[registered.length - 1]
   const finishErrorResult = await finishErrorDef.execute({ path: imgFile, prompt: '描述' }, exec)
   check('finish error 返回 ERROR', typeof finishErrorResult === 'string' && finishErrorResult.startsWith('ERROR') && finishErrorResult.includes('provider error'), finishErrorResult)
@@ -290,7 +292,7 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
     }[n]),
   }
   const emptyCtxWithTools = { ...emptyCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
-  visionTool.apply(emptyCtxWithTools, { maxConcurrency: 1 })
+  visionTool.apply(emptyCtxWithTools, { maxConcurrency: 1, cache: false })
   const emptyDef = registered[registered.length - 1]
   const emptyResult = await emptyDef.execute({ path: imgFile, prompt: '描述' }, exec)
   check('空响应返回 ERROR', typeof emptyResult === 'string' && emptyResult.startsWith('ERROR') && emptyResult.includes('no text'), emptyResult)
@@ -308,10 +310,54 @@ console.log('\n── K. vision-tool 信号量饥饿与错误路径 ──')
     }[n]),
   }
   const defaultPromptCtxWithTools = { ...defaultPromptCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
-  visionTool.apply(defaultPromptCtxWithTools, { maxConcurrency: 1 })
+  visionTool.apply(defaultPromptCtxWithTools, { maxConcurrency: 1, cache: false })
   const defaultDef = registered[registered.length - 1]
   const defaultResult = await defaultDef.execute({ path: imgFile }, exec)
   check('无 prompt 用默认', typeof defaultResult === 'string' && !defaultResult.startsWith('ERROR') && defaultResult === 'ok', defaultResult)
+
+  // 9) 结果缓存（2026-08-21 起与 skill CLI 共用 lib/vision-core.mjs 的缓存）
+  let cacheStreams = 0
+  const cacheCtx = {
+    get: (n) => ({
+      attachments: { saveImage: async (input) => ({ attachmentId: 'test', mediaType: input.mediaType, bytes: input.data.length, width: 1, height: 1, name: input.name }) },
+      llm: {
+        stream: async function* () {
+          cacheStreams++
+          yield { type: 'text-delta', index: 0, text: 'cached-answer' }
+          yield { type: 'finish', reason: { kind: 'stop' } }
+        },
+      },
+    }[n]),
+  }
+  const cacheCtxWithTools = { ...cacheCtx, tools: { register: (tool) => { registered.push(tool); return () => {} } } }
+  visionTool.apply(cacheCtxWithTools, { maxConcurrency: 1 })
+  const cacheDef = registered[registered.length - 1]
+  // prompt 带上 pid：DSH_HOME 已隔离到 TMP，但仍避免与同机其它跑用例撞键。
+  const cachePrompt = `缓存用例-${process.pid}`
+  const firstCall = await cacheDef.execute({ path: imgFile, prompt: cachePrompt }, exec)
+  const secondCall = await cacheDef.execute({ path: imgFile, prompt: cachePrompt }, exec)
+  check('缓存命中不再调用 llm', cacheStreams === 1, `cacheStreams=${cacheStreams}`)
+  check('缓存返回同一文本', firstCall === 'cached-answer' && secondCall === firstCall, `${firstCall} / ${secondCall}`)
+  const otherPrompt = await cacheDef.execute({ path: imgFile, prompt: `${cachePrompt}-变体` }, exec)
+  check('不同 prompt 不复用缓存', cacheStreams === 2 && otherPrompt === 'cached-answer', `cacheStreams=${cacheStreams}`)
+  const auditText = existsSync(join(TMP, 'mydsh/vision.jsonl')) ? readFileSync(join(TMP, 'mydsh/vision.jsonl'), 'utf8') : ''
+  check('审计含 via=preset-tool', auditText.includes('"via":"preset-tool"'), auditText.slice(0, 200))
+  check('审计含 cache-hit 事件', auditText.includes('vision-describe-cache-hit'))
+  check('审计不含图片字节', !auditText.includes('base64'))
+
+  // 10) 新支持的素材类型与参数校验（PDF/视频需外部依赖，这里只验分支与报错）
+  const txtFile = join(TMP, 'notes.txt')
+  writeFileSync(txtFile, 'x')
+  const unsupported = await cacheDef.execute({ path: txtFile }, exec)
+  check('非媒体类型报 unsupported', typeof unsupported === 'string' && unsupported.includes('unsupported type'), unsupported)
+  const badFrames = await cacheDef.execute({ path: imgFile, frames: 99 }, exec)
+  check('frames 越界报错', typeof badFrames === 'string' && badFrames.startsWith('ERROR') && badFrames.includes('frames'), badFrames)
+  const fakePdf = join(TMP, 'fake.pdf')
+  writeFileSync(fakePdf, 'not a real pdf')
+  const pdfResult = await cacheDef.execute({ path: fakePdf, pages: '1' }, exec)
+  check('坏 PDF 报 prepare 失败而非崩溃', typeof pdfResult === 'string' && pdfResult.startsWith('ERROR: cannot prepare'), pdfResult)
+  const badPages = await cacheDef.execute({ path: fakePdf, pages: '3-1' }, exec)
+  check('非法页码报错', typeof badPages === 'string' && badPages.startsWith('ERROR: cannot prepare'), badPages)
 }
 
 // ── L. notify-tool 错误路径与并发安全 ──────────────────────────────────
@@ -591,10 +637,18 @@ console.log('\n── O. ui-video 增量扫描与幂等 ──')
     },
     addEventListener: () => {},
     createElement: (tag) => {
-      const el = { tag, style: {}, setAttribute() {}, src: '', controls: false, preload: '' }
+      const el = {
+        tag, style: {}, src: '', controls: false, preload: '',
+        attrs: {}, children: [], handlers: {},
+        setAttribute(k, v) { this.attrs[k] = v },
+        getAttribute(k) { return this.attrs[k] ?? null },
+        appendChild(child) { this.children.push(child); child.parentNode = this; return child },
+        addEventListener(type, fn) { this.handlers[type] = fn },
+      }
       createdElements.push(el)
       return el
     },
+    createTextNode: (text) => ({ tag: '#text', text }),
   })
   setGlobal('MutationObserver', class {
     observe() {} disconnect() {}
@@ -615,37 +669,39 @@ console.log('\n── O. ui-video 增量扫描与幂等 ──')
   plugin.apply(ctx1)
   check('首次 apply 创建 observer', window.__mydshVideoObserver !== undefined || true)
 
-  // 2) 多次 apply 不重复创建
+  // 2) 重复 apply（= 两条安装路径都装）被挂载防护拦住，不出现第二个 observer
   plugin.apply(ctx1)
   plugin.apply(ctx1)
-  check('多次 apply 不崩溃', true)
+  check('重复 apply 被挂载计数识别', window.__mydshUiVideoMounts === 3, `got ${window.__mydshUiVideoMounts}`)
 
-  // 3) upgrade 函数测试：模拟 DOM 链接替换
-  // 直接测试 upgrade 逻辑：通过模拟 DOM 环境
-  const mockLinks = [
-    { href: '/home/user/video.mp4', getAttribute: (k) => k === 'href' ? '/home/user/video.mp4' : null, setAttribute() {}, parentNode: { replaceChild: () => {} } },
-    { href: 'https://youtube.com/v.mp4', getAttribute: (k) => k === 'href' ? 'https://youtube.com/v.mp4' : null, setAttribute() {}, parentNode: { replaceChild: () => {} } },
-    { href: '/home/user/audio.mp3', getAttribute: (k) => k === 'href' ? '/home/user/audio.mp3' : null, setAttribute() {}, parentNode: { replaceChild: () => {} } },
-  ]
-  // 模拟 upgrade：检查 MEDIA_RE 和 isExternal 逻辑
-  const MEDIA_RE = /\.(mp4|webm|mov|m4v|mkv|ogv|mp3|wav|ogg|flac|m4a)(\?.*)?$/i
-  const AUDIO_RE = /\.(mp3|wav|ogg|flac|m4a)(\?.*)?$/i
-  function isExternal(href) { return /^https?:/i.test(href) || /^data:/i.test(href) || /^javascript:/i.test(href) }
+  // 3) 链接筛选：驱动 bundle 真正导出的 isLocalAbsolute/正则，而不是测试里再抄一份
+  const t = plugin.__test
+  const { MEDIA_RE, AUDIO_RE, isLocalAbsolute } = t
+  const pick = (href) => MEDIA_RE.test(href) && isLocalAbsolute(href)
+  check('本地绝对路径视频被选中', pick('/home/user/video.mp4'))
+  check('本地绝对路径音频被选中', pick('/home/user/audio.mp3') && AUDIO_RE.test('/home/user/audio.mp3'))
+  check('http 外链被排除', !pick('https://youtube.com/v.mp4'))
+  // 协议相对地址（//host/x.mp4）曾经会被当成本地路径改写成 /mydsh-media/ 请求
+  check('协议相对地址被排除', !pick('//evil.example/x.mp4'))
+  check('data: 被排除', !pick('data:video/mp4;base64,AAAA'))
+  check('blob: 被排除', !pick('blob:http://127.0.0.1/abc.mp4'))
+  check('相对路径被排除', !pick('videos/demo.mp4'))
+  check('非媒体扩展名不动', !pick('/home/user/notes.txt'))
 
-  const localLinks = mockLinks.filter((a) => {
-    const href = a.href
-    return MEDIA_RE.test(href) && !isExternal(href)
-  })
-  check('本地视频链接被选中', localLinks.length === 2, `got ${localLinks.length}`)
-  check('外链被排除', !localLinks.some((a) => a.href.includes('youtube.com')))
-
-  const audioLinks = localLinks.filter((a) => AUDIO_RE.test(a.href))
-  check('音频链接识别', audioLinks.length === 1, `got ${audioLinks.length}`)
-
-  // 4) 幂等：已处理的链接不重复替换
-  const processedLink = { href: '/home/user/v.mp4', getAttribute: (k) => k === 'data-mydsh-media' ? '1' : (k === 'href' ? '/home/user/v.mp4' : null), setAttribute() {}, parentNode: { replaceChild: () => {} } }
-  const shouldProcess = processedLink.getAttribute('data-mydsh-media') !== '1'
-  check('已处理链接不重复替换', !shouldProcess)
+  // 4) 主机层路由缺失时的退化：播放器隐藏 + 原链接显示回来（不是留个死播放器）
+  const anchor = { tag: 'a', style: {}, attrs: {}, children: [],
+    setAttribute(k, v) { this.attrs[k] = v }, getAttribute(k) { return this.attrs[k] ?? null },
+    appendChild(c) { this.children.push(c); return c }, addEventListener() {} }
+  const wrap = t.playerFor('/home/user/video.mp4', false, anchor)
+  const media = wrap.children[0]
+  const fallback = wrap.children[1]
+  check('包裹层带已处理标记（幂等）', wrap.getAttribute('data-mydsh-media') === '1')
+  check('播放地址是主机层路由', media.src === '/mydsh-media/' + encodeURIComponent('/home/user/video.mp4'), media.src)
+  check('原链接被保留在兜底区', fallback.children[0] === anchor)
+  check('兜底区初始隐藏', fallback.style.display === 'none', fallback.style.display)
+  media.handlers.error()
+  check('加载失败后播放器隐藏', media.style.display === 'none', media.style.display)
+  check('加载失败后原链接显示', fallback.style.display === 'block', fallback.style.display)
 }
 
 // ── P. host/notify.ts JSONL 日志格式完整性 ─────────────────────────────
@@ -777,6 +833,123 @@ console.log('\n── Q. host/media.ts 大文件并发流式读取 ──')
   check('4MB 整文件 200', fullRes.statusCode === 200)
   check('4MB 数据完整', fullRes.body.length === bigSize, `got ${fullRes.body.length}`)
   check('4MB 数据正确', fullRes.body.equals(buf))
+}
+
+// ── R. ui-notify 提示音配额闸与静音（发包不能拖垮宿主 UI）─────────────
+// localStorage 配额是整个 origin 共享的：dsh UI 自己的设置/草稿和插件挤在一起。
+// 一个几 MB 的自定义音频能把配额吃满，让宿主的写入开始失败 —— 这是「发出去的包
+// 对别人的副作用」，所以上限必须在读文件之前就生效，失败必须能被调用方看见。
+console.log('\n── R. ui-notify 提示音配额闸与静音 ──')
+{
+  const code = readFileSync(join(PROJECT, 'client/ui-notify/lib/client.js'), 'utf8')
+  let captured = null
+  const setGlobal = (name, value) => {
+    try { Object.defineProperty(globalThis, name, { value, configurable: true, writable: true }) } catch {}
+  }
+  const store = new Map()
+  let failNextSet = false
+  const localStorage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => {
+      if (failNextSet) { failNextSet = false; const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e }
+      store.set(k, v)
+    },
+    removeItem: (k) => { store.delete(k) },
+  }
+  let readerUses = 0
+  class FakeFileReader {
+    readAsDataURL(file) { readerUses += 1; this.result = 'data:audio/mp3;base64,' + 'A'.repeat(file.size); this.onload() }
+  }
+  let audioPlays = 0
+  class FakeAudio {
+    constructor(src) { this.src = src; this.volume = 1 }
+    play() { audioPlays += 1; return Promise.resolve() }
+  }
+  setGlobal('window', {
+    __ModuleLoader__: { load: (spec) => { captured = spec; spec.exports = spec.factory((id) => {
+      if (id === 'react') return REACT
+      throw new Error(`bundle require: ${id}`)
+    }) } },
+    AudioContext: undefined,
+  })
+  setGlobal('navigator', { language: 'zh-CN' })
+  setGlobal('document', { hidden: false, title: 't', addEventListener() {}, removeEventListener() {} })
+  setGlobal('localStorage', localStorage)
+  setGlobal('FileReader', FakeFileReader)
+  setGlobal('Audio', FakeAudio)
+  vm.runInThisContext(code, { filename: 'ui-notify-sound.js' })
+  const t = captured.exports.__test
+  check('ui-notify 导出提示音内部逻辑', typeof t.saveCustomSound === 'function')
+  check('上限是 512 KiB', t.MAX_SOUND_BYTES === 512 * 1024, String(t.MAX_SOUND_BYTES))
+
+  // 1) 超限文件：连读都不读（不把几 MB 读进内存），reject 带可分文案的 code
+  let err = null
+  await t.saveCustomSound({ size: t.MAX_SOUND_BYTES + 1 }).catch((e) => { err = e })
+  check('超限文件被拒', err !== null && err.code === 'too-big', err && err.code)
+  check('超限文件根本没被读取', readerUses === 0, `readerUses=${readerUses}`)
+  check('超限时不写 localStorage', t.loadCustomSound() === null)
+
+  // 2) 正常文件：写进去，读得回来
+  err = null
+  await t.saveCustomSound({ size: 32 }).catch((e) => { err = e })
+  check('正常文件保存成功', err === null && typeof t.loadCustomSound() === 'string', err && err.code)
+
+  // 3) 配额失败：reject 'quota'，且不留半截值（否则下次读到坏数据）
+  t.clearCustomSound()
+  failNextSet = true
+  err = null
+  await t.saveCustomSound({ size: 64 }).catch((e) => { err = e })
+  check('配额失败被 reject（不静默吞掉）', err !== null && err.code === 'quota', err && err.code)
+  check('配额失败不留半截值', t.loadCustomSound() === null, String(t.loadCustomSound()))
+
+  // 4) 静音：完成时不发声，显式试听照响
+  await t.saveCustomSound({ size: 16 })
+  audioPlays = 0
+  t.setMuted(true)
+  check('静音状态可读', t.isMuted() === true)
+  t.playSound()
+  check('静音时不播放', audioPlays === 0, `plays=${audioPlays}`)
+  t.playSound(true)
+  check('试听无视静音', audioPlays === 1, `plays=${audioPlays}`)
+  t.setMuted(false)
+  t.playSound()
+  check('取消静音后恢复发声', audioPlays === 2, `plays=${audioPlays}`)
+  check('静音键用 mydsh.notify.* 命名空间', t.MUTE_KEY.startsWith('mydsh.notify.'), t.MUTE_KEY)
+}
+
+// ── S. ui-annotate 批注库总量闸（同一份 origin 配额）───────────────────
+console.log('\n── S. ui-annotate 批注库总量闸 ──')
+{
+  const code = readFileSync(join(PROJECT, 'client/ui-annotate/lib/client.js'), 'utf8')
+  let captured = null
+  const setGlobal = (name, value) => {
+    try { Object.defineProperty(globalThis, name, { value, configurable: true, writable: true }) } catch {}
+  }
+  const store = new Map()
+  setGlobal('window', {
+    __ModuleLoader__: { load: (spec) => { captured = spec; spec.exports = spec.factory((id) => {
+      if (id === 'react') return REACT
+      throw new Error(`bundle require: ${id}`)
+    }) } },
+  })
+  setGlobal('navigator', { language: 'zh-CN' })
+  setGlobal('localStorage', {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => { store.set(k, v) },
+    removeItem: (k) => { store.delete(k) },
+  })
+  vm.runInThisContext(code, { filename: 'ui-annotate.js' })
+  const t = captured.exports.__test
+  check('ui-annotate 导出存储逻辑', typeof t.saveAll === 'function')
+  check('总量上限是 256 KiB', t.MAX_TOTAL_BYTES === 256 * 1024, String(t.MAX_TOTAL_BYTES))
+
+  const k = t.bucketKey('session-a', 'msg-1')
+  check('正常写入放行', t.saveAll({ [k]: [{ id: '1', note: 'hi' }] }) === 'ok')
+  const huge = { [k]: [{ id: '1', note: 'x'.repeat(t.MAX_TOTAL_BYTES) }] }
+  check('超总量被拒（不挤占宿主 UI 配额）', t.saveAll(huge) === 'too-big')
+  check('被拒后旧数据没被动过', JSON.parse(store.get('mydsh.annotations.v1'))[k].length === 1)
+  // 已超限的旧库必须还能删：否则用户被锁在「删不掉也存不下」里
+  check('删除写入永远放行', t.saveAll(huge, true) === 'ok')
 }
 
 console.log(failures === 0 ? `\n深度压测完成 ✔ (${warnings} 项告警)` : `\n${failures} 项失败 ✘ (${warnings} 项告警)`)

@@ -19,19 +19,42 @@ window.__ModuleLoader__.load({
 		const STORAGE_KEY = 'mydsh.annotations.v1';
 		const MAX_NOTE = 2000;
 		const MAX_SEL = 500;
+		/**
+		 * 整个批注库的体积上限。localStorage 配额是**整个 origin 共享**的 —— dsh UI
+		 * 自己的设置、草稿、其他插件都在同一份配额里，批注无限增长会把配额吃满，
+		 * 让宿主 UI 的写入开始失败。到顶就拒绝新增（旧批注一条不动），并把原因说出来。
+		 */
+		const MAX_TOTAL_BYTES = 256 * 1024;
 
 		function isZh() {
 			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
 		}
 		const T = isZh()
-			? { annotate: '批注', add: '添加批注', placeholder: '写下你的批注…', empty: '暂无批注', selected: '选中的文本', noSel: '（未选中文本）', cancel: '取消', del: '删除', saved: '已保存' }
-			: { annotate: 'Annotate', add: 'Add note', placeholder: 'Write a note…', empty: 'No annotations', selected: 'Selected text', noSel: '(no text selected)', cancel: 'Cancel', del: 'Delete', saved: 'Saved' };
+			? { annotate: '批注', add: '添加批注', placeholder: '写下你的批注…', empty: '暂无批注', selected: '选中的文本', noSel: '（未选中文本）', cancel: '取消', del: '删除', saved: '已保存',
+			    full: '批注库已满（上限 256 KB），请先删除一些批注' }
+			: { annotate: 'Annotate', add: 'Add note', placeholder: 'Write a note…', empty: 'No annotations', selected: 'Selected text', noSel: '(no text selected)', cancel: 'Cancel', del: 'Delete', saved: 'Saved',
+			    full: 'Annotation store is full (256 KB max) — delete some notes first' };
 
 		function loadAll() {
 			try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
 		}
-		function saveAll(all) {
-			try { localStorage.setItem(STORAGE_KEY, JSON.stringify(all)); } catch {}
+		/**
+		 * 写回批注库。两道闸：总体积上限 + setItem 失败要报出来（不能吞）。
+		 * @param shrinking - 这次写是删除（结果只会变小）。删除必须永远放行，否则
+		 *   一个已经超限的旧库（升级前存下的）会把用户锁在「删不掉也存不下」里。
+		 * @returns 'ok' | 'too-big' | 'quota' —— 调用方负责把非 ok 显示给用户。
+		 */
+		function saveAll(all, shrinking) {
+			var json;
+			try { json = JSON.stringify(all); } catch { return 'quota'; }
+			if (!shrinking && json.length > MAX_TOTAL_BYTES) return 'too-big';
+			try {
+				localStorage.setItem(STORAGE_KEY, json);
+				return 'ok';
+			} catch {
+				try { console.warn('[@mydsh/ui-annotate] localStorage rejected the write (origin quota is shared with the dsh UI)'); } catch {}
+				return 'quota';
+			}
 		}
 		function bucketKey(sessionId, messageId) { return String(sessionId) + ':' + String(messageId); }
 		function listOf(all, k) { return Array.isArray(all[k]) ? all[k] : []; }
@@ -60,6 +83,7 @@ window.__ModuleLoader__.load({
 			const [note, setNote] = useState('');
 			const [sel, setSel] = useState('');
 			const [items, setItems] = useState([]);
+			const [err, setErr] = useState(null);
 			const btnRef = useRef(null);
 
 			const refresh = useCallback(() => {
@@ -98,7 +122,9 @@ window.__ModuleLoader__.load({
 					sel: sel || undefined,
 				});
 				all[k] = items;
-				saveAll(all);
+				// 写不进去就别假装成功：保留输入框内容，让用户看到原因（删几条再存）。
+				if (saveAll(all) !== 'ok') { setErr(T.full); return; }
+				setErr(null);
 				setNote('');
 				refresh();
 			}, [note, sel, sessionId, messageId, refresh]);
@@ -107,7 +133,7 @@ window.__ModuleLoader__.load({
 				const all = loadAll();
 				const k = bucketKey(sessionId, messageId);
 				all[k] = listOf(all, k).filter((x) => x.id !== id);
-				saveAll(all);
+				if (saveAll(all, true) === 'ok') setErr(null);
 				refresh();
 			}, [sessionId, messageId, refresh]);
 
@@ -175,6 +201,9 @@ window.__ModuleLoader__.load({
 							}, T.cancel),
 						),
 						createElement('div', { style: { marginTop: 10, borderTop: '1px solid var(--dsw-alias-border-l1, #2c313d)', paddingTop: 8 } },
+							err !== null
+								? createElement('div', { style: { color: 'var(--dsw-alias-state-warn-primary, #e5a24a)', marginBottom: '6px' } }, err)
+								: null,
 							items.length === 0
 								? createElement('div', { style: { color: 'var(--dsw-alias-label-secondary, #9aa3b2)', fontStyle: 'italic' } }, T.empty)
 								: items.map((it) => createElement('div', { key: it.id, style: { marginBottom: 8 } },
@@ -199,12 +228,46 @@ window.__ModuleLoader__.load({
 			);
 		}
 
+		// ── 重复挂载防护 ───────────────────────────────────────────────────
+		// 两条安装路径都走一遍（仓库的 profile patch 行 + npm 包自带的 bundle patch 层），
+		// 组合后的 loader tree 里就会有两行同 id 的插件行 → 每条消息两个「批注」按钮。
+		const MOUNT_KEY = '__mydshUiAnnotateMounts';
+
+		/** 认领本进程内的唯一挂载权；返回 false 表示自己是重复的那份。 */
+		function claimMount(ctx) {
+			const g = typeof window !== 'undefined' ? window : globalThis;
+			const n = (g[MOUNT_KEY] || 0) + 1;
+			g[MOUNT_KEY] = n;
+			ctx.effect(() => () => { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); },
+				'@mydsh/ui-annotate: mount counter');
+			if (n > 1) {
+				try {
+					console.warn(
+						'[@mydsh/ui-annotate] mounted ' + n + ' times — the plugin row appears more than once in '
+						+ 'the composed tree, so this copy registered nothing. Keep ONE install path and check with '
+						+ '`dsh --profile web --dump-config`.',
+					);
+				} catch {}
+				return false;
+			}
+			return true;
+		}
+
 		module.exports = {
 			name: '@mydsh/ui-annotate',
 			inject: ['slots'],
 			apply(ctx) {
 				const slots = ctx.get('slots');
-				if (slots === undefined) return;
+				if (slots === undefined) {
+					try {
+						console.warn(
+							'[@mydsh/ui-annotate] the host exposes no `slots` service — nothing was registered. '
+							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
+						);
+					} catch {}
+					return;
+				}
+				if (!claimMount(ctx)) return;
 				ctx.effect(
 					() => slots.inject('conversation.chat.assistant-actions', () => slots.register({
 						name: 'conversation.chat.assistant-actions',
@@ -214,6 +277,8 @@ window.__ModuleLoader__.load({
 					'@mydsh/ui-annotate: assistant action',
 				);
 			},
+			// 供 tests 直接驱动的纯逻辑（不参与运行时）。
+			__test: { saveAll, loadAll, bucketKey, MAX_TOTAL_BYTES },
 		};
 		return module.exports;
 	}

@@ -20,22 +20,62 @@ window.__ModuleLoader__.load({
 		const PROCESSED = 'data-mydsh-media';
 		let started = false;
 
-		function isExternal(href) {
-			try { return /^https?:/i.test(href) || /^data:/i.test(href) || /^javascript:/i.test(href); } catch { return true; }
+		function isZh() {
+			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
+		}
+		const HINT = isZh()
+			? '（播放不了：需要 mydsh 主机层的 /mydsh-media 路由，见 @mydsh/ui-video 的 README）'
+			: '(cannot play: needs mydsh\u2019s host-side /mydsh-media route \u2014 see the @mydsh/ui-video README)';
+
+		/**
+		 * 只升级「单个前导斜杠的绝对路径」—— 正好是主机层路由能接受的形状
+		 * （host/media.ts 要求解码后 startsWith('/')）。于是协议相对地址（//host/x.mp4）、
+		 * http(s)/data/blob/javascript URL、相对路径都不会被改写成媒体请求。
+		 */
+		function isLocalAbsolute(href) {
+			try { return href.charAt(0) === '/' && href.charAt(1) !== '/'; } catch { return false; }
 		}
 
-		/** 一个本地路径 href → /mydsh-media/<b64> 的播放器元素。 */
-		function playerFor(href, isAudio) {
+		/**
+		 * 播放器 + 兜底原链接。
+		 * 为什么不直接把 <a> replaceChild 掉：只从 npm 装本包时，主机层的 /mydsh-media
+		 * 路由并不存在（那半边在 mydsh 仓库里，是安全代码，没复制进包），播放器永远加载
+		 * 不出来 —— 若原链接已被删掉，用户既看不到视频也点不开文件，还只能在 devtools
+		 * 里看到一串 404。改成：原 <a> 留在 DOM 里（先隐藏），播放器 error 时显示回来
+		 * 并附一句原因。
+		 */
+		function playerFor(href, isAudio, anchor) {
 			const src = '/mydsh-media/' + encodeURIComponent(href);
+			const wrap = document.createElement('div');
+			wrap.setAttribute(PROCESSED, '1');
+			wrap.style.margin = '6px 0';
+
 			const el = document.createElement(isAudio ? 'audio' : 'video');
 			el.controls = true;
 			el.preload = 'metadata';
 			el.style.maxWidth = '100%';
 			el.style.borderRadius = '8px';
-			el.style.margin = '6px 0';
 			if (!isAudio) el.style.width = 'min(560px, 100%)';
 			el.src = src;
-			return el;
+
+			const fallback = document.createElement('div');
+			fallback.style.display = 'none';
+			fallback.style.fontSize = '12px';
+			fallback.style.lineHeight = '18px';
+			fallback.style.opacity = '0.75';
+			if (anchor) fallback.appendChild(anchor);
+			const hint = document.createElement('span');
+			hint.textContent = ' ' + HINT;
+			fallback.appendChild(hint);
+
+			el.addEventListener('error', function() {
+				el.style.display = 'none';
+				fallback.style.display = 'block';
+			}, { once: true });
+
+			wrap.appendChild(el);
+			wrap.appendChild(fallback);
+			return wrap;
 		}
 
 		/** 扫描并升级一个容器内的媒体链接。 */
@@ -44,13 +84,20 @@ window.__ModuleLoader__.load({
 			for (const a of links) {
 				if (a.getAttribute(PROCESSED) === '1') continue;
 				const href = a.getAttribute('href') || '';
-				if (!MEDIA_RE.test(href) || isExternal(href)) continue;
-				const isAudio = AUDIO_RE.test(href);
-				const player = playerFor(href, isAudio);
+				if (!MEDIA_RE.test(href) || !isLocalAbsolute(href)) continue;
+				const parent = a.parentNode;
+				if (!parent) continue;
 				a.setAttribute(PROCESSED, '1');
-				a.parentNode.replaceChild(player, a);
+				// 先记住插入位置：playerFor 会把 a 搬进 fallback（从 parent 摘下来），
+				// 之后就不能再用 replaceChild(player, a) 了。
+				const next = a.nextSibling;
+				const player = playerFor(href, AUDIO_RE.test(href), a);
+				parent.insertBefore(player, next);
 			}
 		}
+
+		/** 当前 MutationObserver（模块闭包内，不往 window 上挂全局名字）。 */
+		let observerRef = null;
 
 		function start() {
 			if (started) return;
@@ -68,25 +115,56 @@ window.__ModuleLoader__.load({
 					}
 				});
 				observer.observe(document.body, { childList: true, subtree: true });
-				window.__mydshVideoObserver = observer;
+				observerRef = observer;
 			};
 			if (document.body) boot();
 			else document.addEventListener('DOMContentLoaded', boot, { once: true });
 		}
 
+		// ── 重复挂载防护 ───────────────────────────────────────────────────
+		// 两条安装路径都走一遍（仓库 install.sh 写 profile 的 cordis.patch.yml + npm 包
+		// 自带的 bundle patch 层），组合后的 loader tree 里就会有两行同 id 的插件行，
+		// 于是两份 MutationObserver 同时扫 DOM。别人安装时最容易踩这个，插件自己兜住。
+		const MOUNT_KEY = '__mydshUiVideoMounts';
+
+		/** 认领本进程内的唯一挂载权；返回 false 表示自己是重复的那份。 */
+		function claimMount(ctx) {
+			const g = typeof window !== 'undefined' ? window : globalThis;
+			const n = (g[MOUNT_KEY] || 0) + 1;
+			g[MOUNT_KEY] = n;
+			ctx.effect(() => () => { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); },
+				'@mydsh/ui-video: mount counter');
+			if (n > 1) {
+				try {
+					console.warn(
+						'[@mydsh/ui-video] mounted ' + n + ' times — the plugin row appears more than once in '
+						+ 'the composed tree, so this copy started no observer. Keep ONE install path: either the npm '
+						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-video`) or the mydsh repo rows in '
+						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
+					);
+				} catch {}
+				return false;
+			}
+			return true;
+		}
+
 		module.exports = {
 			name: '@mydsh/ui-video',
 			apply(ctx) {
+				if (!claimMount(ctx)) return;
 				// 走 ctx.effect 生命周期：插件卸载时框架自动调用 disposer，
-				// 断开 MutationObserver，避免旁路到全局变量导致的资源泄漏。
+				// 断开 MutationObserver，避免资源泄漏。
 				ctx.effect(() => {
 					start();
 					return () => {
-						try { if (window.__mydshVideoObserver) window.__mydshVideoObserver.disconnect(); } catch {}
+						try { if (observerRef) observerRef.disconnect(); } catch {}
+						observerRef = null;
 						started = false; // 允许重新挂载
 					};
 				}, '@mydsh/ui-video: observer');
 			},
+			// 供 tests 直接驱动的纯逻辑（不参与运行时）。
+			__test: { isLocalAbsolute, playerFor, MEDIA_RE, AUDIO_RE },
 		};
 		return module.exports;
 	}

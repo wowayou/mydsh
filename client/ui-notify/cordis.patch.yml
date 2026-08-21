@@ -1,0 +1,8 @@
+# @mydsh/ui-notify 的 bundle patch 层：`dsh plugin add @mydsh/ui-notify` 装完后，
+# dsh 会把本包追加到 profile 的 `dsh.profile.bundles`，然后应用这一层，
+# 把浏览器插件行插入 loader tree（用户无需手改 cordis.patch.yml）。
+# 行的 name 就是本包名；包 manifest 里的 `dsh.client.platform: web`
+# 让它进入浏览器 roster（window.__DSH_BOOT__）。
+- insert:
+    - id: mydsh-ui-notify
+      name: '@mydsh/ui-notify'
