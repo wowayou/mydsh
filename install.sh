@@ -60,7 +60,9 @@ echo
 # 1) Agent 预设（权威源 = preset/）
 say "1) 预设 → $PRESET_DIR"
 run mkdir -p "$PRESET_DIR"
-run rsync -a --delete "$PROJECT/preset/" "$PRESET_DIR/"
+# --copy-unsafe-links：preset/plugins/lib/vision-core.mjs 是指向仓库根 lib/ 的符号
+# 链接（共用核心的唯一权威源），部署时必须落成真实文件，否则装完就是断链。
+run rsync -a --delete --copy-unsafe-links "$PROJECT/preset/" "$PRESET_DIR/"
 
 # 1b) 技能包（权威源 = skills/）
 #     $DSH_HOME/skills 是共享目录（用户自己的技能也在这里），所以**逐个技能**同步，
@@ -70,10 +72,38 @@ run mkdir -p "$SKILLS_DIR"
 for skill in "$PROJECT"/skills/*/; do
   [ -d "$skill" ] || continue
   name="$(basename "$skill")"
-  run rsync -a --delete "$skill" "$SKILLS_DIR/$name/"
+  # --copy-unsafe-links 同上：skills/vision/scripts/lib/vision-core.mjs 也是符号链接。
+  run rsync -a --delete --copy-unsafe-links "$skill" "$SKILLS_DIR/$name/"
 done
 # 技能里的脚本要可执行（rsync -a 已保留权限，这里兜底）。
 run chmod -R u+rwX "$SKILLS_DIR"
+
+# 1c) SKILL.md 里的脚本路径 → 真实绝对路径
+#     仓库里写的是默认值 ~/.dsh/skills/...（离线可读），部署时替换成本机真实
+#     $SKILLS_DIR，这样模型拿到的就是可直接执行的绝对路径（DSH_HOME 非默认时也对）。
+#     只改本项目自己的技能，绝不碰 $DSH_HOME/skills 下用户其它技能。
+say "1c) SKILL.md 路径绝对化 → $SKILLS_DIR"
+for skill in "$PROJECT"/skills/*/; do
+  [ -d "$skill" ] || continue
+  name="$(basename "$skill")"
+  target="$SKILLS_DIR/$name/SKILL.md"
+  if [ "$DRY" -eq 1 ]; then
+    echo "[dry]   (改写 $target 中的 ~/.dsh/skills/ → $SKILLS_DIR/)"
+    continue
+  fi
+  [ -f "$target" ] || continue
+  python3 - "$target" "$SKILLS_DIR" <<'PYEOF'
+import sys
+path, root = sys.argv[1], sys.argv[2].rstrip('/')
+with open(path, encoding='utf-8') as f:
+    text = f.read()
+fixed = text.replace('~/.dsh/skills/', f'{root}/')
+if fixed != text:
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(fixed)
+    print('  路径已绝对化:', path)
+PYEOF
+done
 
 # 2) 主机层插件（权威源 = host/）
 say "2) 主机插件 → $HOST_PLUGIN_DIR"

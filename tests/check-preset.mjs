@@ -122,5 +122,15 @@ check('preset.yml 存在', existsSync(join(PRESET_DIR, 'preset.yml')))
 check('plugins/notify-tool.ts 存在', existsSync(join(PRESET_DIR, 'plugins/notify-tool.ts')))
 check('plugins/vision-tool.ts 存在', existsSync(join(PRESET_DIR, 'plugins/vision-tool.ts')))
 
+// 共用核心（路径限制/素材/缓存/审计）在仓库里是指向项目根 lib/ 的符号链接；
+// install.sh 必须用 rsync --copy-unsafe-links 把它落成**真实文件**，否则部署树里
+// 是断链，vision_describe 一加载就崩（预设整体加载失败 → 新建会话失败）。
+{
+  const core = join(PRESET_DIR, 'plugins/lib/vision-core.mjs')
+  const stat = existsSync(core) ? lstatSync(core) : null
+  check('plugins/lib/vision-core.mjs 存在', stat !== null, core)
+  check('plugins/lib/vision-core.mjs 是真实文件（非符号链接）', stat !== null && stat.isFile() && !stat.isSymbolicLink(), stat === null ? '' : `isFile=${stat.isFile()} isLink=${stat.isSymbolicLink()}`)
+}
+
 console.log(failures === 0 ? '\n预设校验通过 ✔' : `\n${failures} 项失败 ✘`)
 process.exit(failures === 0 ? 0 : 1)

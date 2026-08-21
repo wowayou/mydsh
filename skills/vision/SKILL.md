@@ -22,32 +22,32 @@ metadata:
 
 ## 用法
 
-脚本在本技能目录下（上面那行 "Base directory for this skill" 给的路径）：
+脚本路径（已部署，直接用绝对路径调用；`$DSH_HOME` 默认 `~/.dsh`）：
 
 ```bash
-node <skill-dir>/scripts/dsh-vision.mjs <文件...> [选项]
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs <文件...> [选项]
 ```
 
 常用：
 
 ```bash
 # 描述一张截图
-node <skill-dir>/scripts/dsh-vision.mjs ./shot.png
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./shot.png
 
 # 取图里的文字（OCR）
-node <skill-dir>/scripts/dsh-vision.mjs ./scan.png --preset ocr
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./scan.png --preset ocr
 
 # UI 审查：布局/对齐/对比度/可用性问题清单
-node <skill-dir>/scripts/dsh-vision.mjs ./page.png --preset ui
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./page.png --preset ui
 
 # 扫描件 PDF 前三页转文字
-node <skill-dir>/scripts/dsh-vision.mjs ./doc.pdf --pages 1-3 --preset ocr
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./doc.pdf --pages 1-3 --preset ocr
 
 # 录屏抽 4 帧，问具体问题
-node <skill-dir>/scripts/dsh-vision.mjs ./demo.mp4 --frames 4 -p "用户依次点了哪些按钮？"
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./demo.mp4 --frames 4 -p "用户依次点了哪些按钮？"
 
 # 两图对比（改版前后）
-node <skill-dir>/scripts/dsh-vision.mjs ./before.png ./after.png --preset diff
+node ~/.dsh/skills/vision/scripts/dsh-vision.mjs ./before.png ./after.png --preset diff
 ```
 
 提问预设（`--preset`）：`describe`（默认）· `ocr` · `ui` · `chart` · `code` · `diff`。

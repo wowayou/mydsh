@@ -6,55 +6,50 @@
  * 与预设插件 `vision_describe` 的分工：
  *   - 本 CLI 属 **skill 层**：不进 harness 进程、不占常驻 tool schema（只在 skill
  *     被加载时才进上下文），直连 provider 的 OpenAI/Anthropic 兼容端点 ——
- *     绕开 harness 的模型 modality 门禁，并额外支持 多图 / PDF 页 / 视频帧 /
- *     上传前缩放 / 结果缓存。改动它不需要重启 dsh，也不依赖 `@deepseek-ai/*` 内部 API。
+ *     绕开 harness 的模型 modality 门禁，并额外支持 多图 / 上传前缩放 / 三种方言。
+ *     改动它不需要重启 dsh，也不依赖 `@deepseek-ai/*` 内部 API。
  *   - `vision_describe`（preset/plugins/vision-tool.ts）属 **agent 层**：一次工具
- *     调用即出结果并渲染在会话里，适合「一张图 + 一个问题」的最短路径。
+ *     调用即出结果并渲染在会话里，适合「一个文件 + 一个问题」的最短路径。
+ *
+ * 两者共用 `lib/vision-core.mjs`（路径限制 / 素材准备 / 缓存 / 审计的唯一权威源）；
+ * 本文件只留 **CLI 独有** 的部分：配置读取与选路、三种 API 方言、HTTP 重试、参数解析。
  *
  * 配置完全复用 dsh 自身，不再单独配一份：
  *   $DSH_HOME/settings.yaml → llm-pi-ai.providers.<name>.{baseURL,api,apiKeyEnv,models}
  *   $DSH_HOME/.credentials.yaml → apiKeyEnv 对应的密钥
  * 密钥只在进程内使用：不打印、不写审计、不进模型上下文。
  *
- * 安全边界：
+ * 安全边界（细节见 lib/vision-core.mjs）：
  *   - 路径限制：MYDSH_VISION_ROOTS（一旦设置即权威，命令行参数无法扩大）；
  *     否则 cwd + MYDSH_VISION_EXTRA_ROOTS。先 realpath 再比对，防符号链接逃逸。
- *   - 每次调用（含被拒）追加审计到 $DSH_HOME/mydsh/vision.jsonl（与插件同一份）。
+ *   - 每次调用（含被拒）追加审计到 $DSH_HOME/mydsh/vision.jsonl（与插件同一份，
+ *     用 via 区分平面）。
  *   - 诚实说明：本 CLI 跑在模型的 bash 沙箱里，而 dsh 的 sandbox 只管文件效果、
  *     不限制网络（sandbox-policy README：network/process policy 不在其词汇表内）。
  *     所以对「已被提示注入的模型」来说，这里的 containment 是护栏 + 可回溯痕迹，
  *     不是不可绕过的边界（模型本就能直接 curl）。要硬边界：在启动器里固定
  *     MYDSH_VISION_ROOTS，并在系统层面限制 dsh 子进程的出网。
  */
-import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { homedir, tmpdir } from 'node:os'
-import { basename, extname, isAbsolute, join, resolve, sep } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
-import { promisify } from 'node:util'
+import {
+  MAX_IMAGES, audit as auditLine, cacheKeyOf, cacheRead, cacheWrite, contain, dshHome,
+  prepareImages, readImageBytes, rootsFrom,
+} from './lib/vision-core.mjs'
 
-const run = promisify(execFile)
+// 路径限制 / 素材准备 / 页码解析 是共用核心的能力，这里透传出去供测试与复用。
+export { contain, kindOf, parsePages, rootsFrom } from './lib/vision-core.mjs'
 
-const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
-const AUDIT_DIR = join(DSH_HOME, 'mydsh')
-const AUDIT_FILE = join(AUDIT_DIR, 'vision.jsonl')
-const CACHE_DIR = join(AUDIT_DIR, 'vision-cache')
-/** 缓存条目上限：写入时顺带裁剪，避免无界增长。 */
-const CACHE_KEEP = 200
-
-/** 图片扩展名 → media type（视觉端点普遍只接这四类 + gif）。 */
-const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
-const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov', '.m4v', '.mkv', '.ogv', '.avi'])
-const PDF_EXTS = new Set(['.pdf'])
-
-/** 各类输入的读取前大小预检（防把巨型文件读进内存）。 */
-const MAX_BYTES = { image: 20 * 1024 * 1024, pdf: 200 * 1024 * 1024, video: 4 * 1024 * 1024 * 1024 }
-/** 一次请求最多带几张图，以及 base64 总量上限（对齐 harness 的 20MiB 请求图片预算，留头寸）。 */
-const MAX_IMAGES = 8
+const DSH_HOME = dshHome()
+/** base64 总量上限（对齐 harness 的 20MiB 请求图片预算，留头寸）。 */
 const MAX_PAYLOAD_BYTES = 15 * 1024 * 1024
+
+/** 审计：本平面固定 via=skill-cli。 */
+const audit = (event, detail) => auditLine(event, { via: 'skill-cli', ...detail })
 
 /** 提问预设：把「看图要看什么」固化下来，省得每次现编 prompt。 */
 const PRESETS = {
@@ -105,18 +100,6 @@ const USAGE = `dsh-vision — 让文本模型看懂图片 / PDF 页 / 视频帧�
   dsh-vision demo.mp4 --frames 4 -p "用户点了哪些按钮？"
   dsh-vision before.png after.png --preset diff         # 两图对比
 `
-
-// ── 审计 ────────────────────────────────────────────────────────────────────
-
-/** 审计行：每次调用（含被拒）落一条。绝不写入密钥或图片内容。 */
-function audit(event, detail) {
-  try {
-    mkdirSync(AUDIT_DIR, { recursive: true })
-    appendFileSync(AUDIT_FILE, `${JSON.stringify({ t: new Date().toISOString(), event, via: 'skill-cli', ...detail })}\n`)
-  } catch {
-    // 审计失败不阻断功能。
-  }
-}
 
 // ── YAML ────────────────────────────────────────────────────────────────────
 
@@ -279,166 +262,6 @@ export function endpointOf(api, baseURL) {
   return `${base}/chat/completions`
 }
 
-// ── 路径限制 ────────────────────────────────────────────────────────────────
-
-/** 解析 ':' 分隔的根列表（支持 ~ 展开，忽略相对路径段）。 */
-function parseRoots(raw) {
-  return (raw ?? '').split(':').map((s) => s.trim()).filter((s) => s !== '')
-    .map((p) => (p === '~' ? homedir() : p.startsWith('~/') ? join(homedir(), p.slice(2)) : p))
-    .filter((p) => isAbsolute(p))
-}
-
-/**
- * 可读根：MYDSH_VISION_ROOTS 一旦设置即权威（命令行/cwd 都无法扩大 —— 这是给
- * 「想要硬边界」的部署用的开关）；否则 cwd + MYDSH_VISION_EXTRA_ROOTS。
- */
-export function rootsFrom(env, cwd) {
-  const pinned = parseRoots(env.MYDSH_VISION_ROOTS)
-  if (pinned.length > 0) return { roots: pinned, pinned: true }
-  return { roots: [cwd, ...parseRoots(env.MYDSH_VISION_EXTRA_ROOTS)], pinned: false }
-}
-
-/** 输入按扩展名分类。 */
-export function kindOf(path) {
-  const ext = extname(path).toLowerCase()
-  if (ext in IMAGE_TYPES) return { kind: 'image', ext, mediaType: IMAGE_TYPES[ext] }
-  if (PDF_EXTS.has(ext)) return { kind: 'pdf', ext }
-  if (VIDEO_EXTS.has(ext)) return { kind: 'video', ext }
-  return { kind: 'unsupported', ext }
-}
-
-/** resolve → 必须普通文件 → 大小预检 → realpath → 落在某个根内（根不存在则跳过）。 */
-export function contain(input, roots) {
-  if (roots.length === 0) return { ok: false, reason: 'no-roots' }
-  const abs = resolve(input)
-  let st
-  try {
-    st = statSync(abs)
-  } catch {
-    return { ok: false, reason: 'missing' }
-  }
-  if (!st.isFile()) return { ok: false, reason: 'not-file' }
-  let real
-  try {
-    real = realpathSync(abs)
-  } catch {
-    return { ok: false, reason: 'missing' }
-  }
-  const inside = roots.some((root) => {
-    let realRoot
-    try {
-      realRoot = realpathSync(root)
-    } catch {
-      return false
-    }
-    return real === realRoot || real.startsWith(realRoot.endsWith(sep) ? realRoot : realRoot + sep)
-  })
-  if (!inside) return { ok: false, reason: 'outside' }
-  // 扩展名判定放在真实路径上：防「x.png 是指向别处的符号链接」这类绕过。
-  const type = kindOf(real)
-  if (type.kind === 'unsupported') return { ok: false, reason: 'unsupported' }
-  if (st.size > MAX_BYTES[type.kind]) return { ok: false, reason: 'too-large', size: st.size }
-  return { ok: true, path: real, size: st.size, ...type }
-}
-
-// ── 素材准备（PDF 渲染页 / 视频抽帧 / 上传前缩放）──────────────────────────
-
-/** "1-3,7" → [1,2,3,7]。非法段直接报错，避免悄悄少读几页。 */
-export function parsePages(spec) {
-  const pages = []
-  for (const part of String(spec).split(',')) {
-    const seg = part.trim()
-    if (seg === '') continue
-    const range = /^(\d+)\s*-\s*(\d+)$/.exec(seg)
-    if (range !== null) {
-      const [from, to] = [Number(range[1]), Number(range[2])]
-      if (from < 1 || to < from) throw new Error(`--pages 区间非法: ${seg}`)
-      for (let p = from; p <= to; p += 1) pages.push(p)
-      continue
-    }
-    if (!/^\d+$/.test(seg) || Number(seg) < 1) throw new Error(`--pages 段非法: ${seg}`)
-    pages.push(Number(seg))
-  }
-  if (pages.length === 0) throw new Error('--pages 为空')
-  return [...new Set(pages)]
-}
-
-/** 外部二进制是否可用（缺了就降级，不擅自安装）。 */
-async function hasBin(bin) {
-  try {
-    await run(bin, ['-version'], { timeout: 5000 })
-    return true
-  } catch (error) {
-    return error?.code !== 'ENOENT'
-  }
-}
-
-/** ffprobe 读取像素尺寸；失败返回 undefined（缩放随之跳过）。 */
-async function probeSize(path) {
-  try {
-    const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', path], { timeout: 20000 })
-    const [w, h] = stdout.trim().split('\n')[0].split('x').map(Number)
-    return Number.isFinite(w) && Number.isFinite(h) ? { width: w, height: h } : undefined
-  } catch {
-    return undefined
-  }
-}
-
-/** 视频时长（秒）；拿不到就按 0 处理（只抽第 0 秒一帧）。 */
-async function probeDuration(path) {
-  try {
-    const { stdout } = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', path], { timeout: 20000 })
-    const seconds = Number(stdout.trim())
-    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0
-  } catch {
-    return 0
-  }
-}
-
-/** PDF → 每页一张 PNG（pdftoppm，150dpi 足够读正文与截图）。 */
-async function renderPdf(path, pages, dir) {
-  if (!await hasBin('pdftoppm')) throw new Error('需要 pdftoppm（poppler-utils）才能渲染 PDF；或先自行导出图片再传入')
-  const out = []
-  for (const page of pages) {
-    const prefix = join(dir, `pdf-p${page}`)
-    await run('pdftoppm', ['-png', '-r', '150', '-f', String(page), '-l', String(page), path, prefix], { timeout: 120000 })
-    const file = readdirSync(dir).filter((f) => f.startsWith(`pdf-p${page}-`) || f === `pdf-p${page}.png`).sort()[0]
-    if (file === undefined) throw new Error(`PDF 第 ${page} 页渲染失败（可能超出总页数）`)
-    out.push({ path: join(dir, file), mediaType: 'image/png', label: `${basename(path)} p${page}` })
-  }
-  return out
-}
-
-/** 视频 → 指定时间点各抽一帧 PNG（-ss 放 -i 前用关键帧快速定位）。 */
-async function grabFrames(path, times, dir) {
-  if (!await hasBin('ffmpeg')) throw new Error('需要 ffmpeg 才能从视频抽帧；或先自行截图再传入')
-  const out = []
-  for (const [index, at] of times.entries()) {
-    const file = join(dir, `frame-${index}.png`)
-    await run('ffmpeg', ['-nostdin', '-v', 'error', '-ss', String(at), '-i', path, '-frames:v', '1', '-y', file], { timeout: 120000 })
-    if (!existsSync(file)) throw new Error(`视频抽帧失败 @${at}s`)
-    out.push({ path: file, mediaType: 'image/png', label: `${basename(path)} @${at}s` })
-  }
-  return out
-}
-
-/** 长边超过 maxSide 时缩放（省 token 与钱）；没有 ffmpeg 就原样上传。 */
-async function maybeDownscale(image, maxSide, dir, index) {
-  if (maxSide <= 0) return image
-  const size = await probeSize(image.path)
-  if (size === undefined || Math.max(size.width, size.height) <= maxSide) return image
-  if (!await hasBin('ffmpeg')) return image
-  const jpeg = image.mediaType === 'image/jpeg'
-  const file = join(dir, `scaled-${index}${jpeg ? '.jpg' : '.png'}`)
-  try {
-    await run('ffmpeg', ['-nostdin', '-v', 'error', '-i', image.path, '-vf', `scale=${maxSide}:${maxSide}:force_original_aspect_ratio=decrease`, '-y', file], { timeout: 120000 })
-  } catch {
-    return image // 缩放失败不致命：原图继续。
-  }
-  if (!existsSync(file)) return image
-  return { ...image, path: file, mediaType: jpeg ? 'image/jpeg' : 'image/png', scaledFrom: `${size.width}x${size.height}` }
-}
-
 // ── 三种 API 方言：请求体与取文本 ──────────────────────────────────────────
 
 /** images: [{ base64, mediaType }]。maxTokens 只是产出上限，不是计费上限。 */
@@ -530,31 +353,6 @@ async function callModel({ url, api, key, body, timeoutMs, retries }) {
   throw lastError ?? new Error('视觉模型调用失败')
 }
 
-// ── 结果缓存（同图 + 同问题 + 同模型不重复付费）────────────────────────────
-
-const sha256 = (data) => createHash('sha256').update(data).digest('hex')
-
-function cacheRead(key) {
-  try {
-    return JSON.parse(readFileSync(join(CACHE_DIR, `${key}.json`), 'utf8'))
-  } catch {
-    return undefined
-  }
-}
-
-function cacheWrite(key, value) {
-  try {
-    mkdirSync(CACHE_DIR, { recursive: true })
-    writeFileSync(join(CACHE_DIR, `${key}.json`), JSON.stringify(value))
-    // 顺带裁剪：按 mtime 保留最近 CACHE_KEEP 条，避免缓存目录无界增长。
-    const files = readdirSync(CACHE_DIR).filter((f) => f.endsWith('.json'))
-      .map((f) => ({ f, t: statSync(join(CACHE_DIR, f)).mtimeMs })).sort((a, b) => b.t - a.t)
-    for (const { f } of files.slice(CACHE_KEEP)) unlinkSync(join(CACHE_DIR, f))
-  } catch {
-    // 缓存不可用不阻断功能。
-  }
-}
-
 // ── main ────────────────────────────────────────────────────────────────────
 
 const OPTIONS = {
@@ -581,15 +379,16 @@ function int(raw, name, { min = 0 } = {}) {
   return value
 }
 
-/** 视频抽帧时间点：--at 优先，否则在时长内均匀取 n 点（避开首尾黑帧）。 */
-function frameTimes({ at, frames, duration }) {
-  if (at !== undefined && at !== '') {
-    const times = at.split(',').map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n >= 0)
-    if (times.length === 0) throw new Error('--at 里没有合法的秒数')
-    return times
-  }
-  if (duration <= 0) return [0]
-  return Array.from({ length: frames }, (_, i) => Math.round(duration * (i + 1) / (frames + 1) * 10) / 10)
+/** 被拒原因 → 给人看的中文说明（决策逻辑在 core，措辞留在各平面）。 */
+function denialText(result, roots, pinned) {
+  return {
+    'no-roots': '没有可用的允许根（cwd 不可用且未设置 MYDSH_VISION_ROOTS/EXTRA_ROOTS）',
+    missing: '文件不存在或不可读',
+    'not-file': '不是普通文件',
+    outside: `不在允许根内（${roots.join(', ')}${pinned ? '；由 MYDSH_VISION_ROOTS 固定' : ''}）`,
+    unsupported: '不支持的类型（图片/PDF/视频之外）',
+    'too-large': `文件过大（${result.size} 字节）`,
+  }[result.reason]
 }
 
 async function main() {
@@ -610,7 +409,7 @@ async function main() {
   const retries = int(values.retries, 'retries')
   const frames = int(values.frames, 'frames', { min: 1 })
 
-  // ── 路径限制：先把每个输入夹到允许根内 ──
+  // ── 路径限制：先把每个输入夹到允许根内（决策来自 lib/vision-core.mjs）──
   const { roots, pinned } = rootsFrom(process.env, process.cwd())
   const contained = []
   const denials = []
@@ -618,39 +417,20 @@ async function main() {
     const result = contain(input, roots)
     if (!result.ok) {
       audit('cli-denied', { path: input, reason: result.reason, ...(result.size === undefined ? {} : { size: result.size }) })
-      denials.push(`${input}: ${{
-        'no-roots': '没有可用的允许根（cwd 不可用且未设置 MYDSH_VISION_ROOTS/EXTRA_ROOTS）',
-        missing: '文件不存在或不可读',
-        'not-file': '不是普通文件',
-        outside: `不在允许根内（${roots.join(', ')}${pinned ? '；由 MYDSH_VISION_ROOTS 固定' : ''}）`,
-        unsupported: '不支持的类型（图片/PDF/视频之外）',
-        'too-large': `文件过大（${result.size} 字节）`,
-      }[result.reason]}`)
+      denials.push(`${input}: ${denialText(result, roots, pinned)}`)
       continue
     }
     contained.push(result)
   }
   if (denials.length > 0) throw new Error(`以下输入被拒绝:\n  - ${denials.join('\n  - ')}`)
 
-  // ── 素材：PDF 渲染页 / 视频抽帧 / 图片直用 ──
+  // ── 素材：PDF 渲染页 / 视频抽帧 / 图片直用（含上传前缩放）──
   const tmp = mkdtempSync(join(tmpdir(), 'dsh-vision-'))
   try {
-    let images = []
-    for (const item of contained) {
-      if (item.kind === 'image') images.push({ path: item.path, mediaType: item.mediaType, label: basename(item.path) })
-      else if (item.kind === 'pdf') images.push(...await renderPdf(item.path, parsePages(values.pages), tmp))
-      else images.push(...await grabFrames(item.path, frameTimes({ at: values.at, frames, duration: await probeDuration(item.path) }), tmp))
-    }
-    if (images.length === 0) throw new Error('没有可用的图片')
-    if (images.length > MAX_IMAGES) throw new Error(`一次最多 ${MAX_IMAGES} 张图，当前 ${images.length} 张（减少 --pages/--frames 或分批）`)
-
-    images = await Promise.all(images.map((image, index) => maybeDownscale(image, maxSide, tmp, index)))
+    const images = readImageBytes(await prepareImages(contained, { dir: tmp, pages: values.pages, frames, at: values.at, maxSide }))
     let payload = 0
     for (const image of images) {
-      const bytes = readFileSync(image.path)
-      image.base64 = bytes.toString('base64')
-      image.bytes = bytes.length
-      image.sha256 = sha256(bytes)
+      image.base64 = image.data.toString('base64')
       payload += image.base64.length
     }
     if (payload > MAX_PAYLOAD_BYTES) throw new Error(`图片总量 ${Math.round(payload / 1048576)}MB 超过上限 ${Math.round(MAX_PAYLOAD_BYTES / 1048576)}MB（调小 --max-side 或减少张数）`)
@@ -676,7 +456,7 @@ async function main() {
     }
 
     // ── 缓存：同模型 + 同问题 + 同图字节 → 直接复用（省钱且幂等）──
-    const cacheKey = sha256(JSON.stringify({ api: route.api, baseURL: route.baseURL, model: route.model, prompt, images: images.map((i) => i.sha256) }))
+    const cacheKey = cacheKeyOf({ api: route.api, baseURL: route.baseURL, model: route.model, prompt, images: images.map((i) => i.sha256) })
     const cached = values['no-cache'] ? undefined : cacheRead(cacheKey)
     let text
     if (cached !== undefined && typeof cached.text === 'string') {
