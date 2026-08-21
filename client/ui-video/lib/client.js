@@ -10,7 +10,7 @@
 //     `[demo.mp4](/home/user/videos/demo.mp4)` 或直接 `[demo.mp4](/home/... )`。
 //   - 幂等：已处理过的元素打上标记，不重复替换；新消息到达时自动生效。
 window.__ModuleLoader__.load({
-	id: '@mydsh/ui-video',
+	id: '@wowayou/ui-video',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -24,8 +24,8 @@ window.__ModuleLoader__.load({
 			try { return (navigator.language || '').toLowerCase().startsWith('zh'); } catch { return false; }
 		}
 		const HINT = isZh()
-			? '（播放不了：需要 mydsh 主机层的 /mydsh-media 路由，见 @mydsh/ui-video 的 README）'
-			: '(cannot play: needs mydsh\u2019s host-side /mydsh-media route \u2014 see the @mydsh/ui-video README)';
+			? '（播放不了：需要 mydsh 主机层的 /mydsh-media 路由，见 @wowayou/ui-video 的 README）'
+			: '(cannot play: needs mydsh\u2019s host-side /mydsh-media route \u2014 see the @wowayou/ui-video README)';
 
 		/**
 		 * 只升级「单个前导斜杠的绝对路径」—— 正好是主机层路由能接受的形状
@@ -133,13 +133,13 @@ window.__ModuleLoader__.load({
 			const n = (g[MOUNT_KEY] || 0) + 1;
 			g[MOUNT_KEY] = n;
 			ctx.effect(() => () => { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); },
-				'@mydsh/ui-video: mount counter');
+				'@wowayou/ui-video: mount counter');
 			if (n > 1) {
 				try {
 					console.warn(
-						'[@mydsh/ui-video] mounted ' + n + ' times — the plugin row appears more than once in '
+						'[@wowayou/ui-video] mounted ' + n + ' times — the plugin row appears more than once in '
 						+ 'the composed tree, so this copy started no observer. Keep ONE install path: either the npm '
-						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-video`) or the mydsh repo rows in '
+						+ 'bundle layer (`dsh plugin --profile web add @wowayou/ui-video`) or the mydsh repo rows in '
 						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
 					);
 				} catch {}
@@ -149,7 +149,7 @@ window.__ModuleLoader__.load({
 		}
 
 		module.exports = {
-			name: '@mydsh/ui-video',
+			name: '@wowayou/ui-video',
 			apply(ctx) {
 				if (!claimMount(ctx)) return;
 				// 走 ctx.effect 生命周期：插件卸载时框架自动调用 disposer，
@@ -161,7 +161,7 @@ window.__ModuleLoader__.load({
 						observerRef = null;
 						started = false; // 允许重新挂载
 					};
-				}, '@mydsh/ui-video: observer');
+				}, '@wowayou/ui-video: observer');
 			},
 			// 供 tests 直接驱动的纯逻辑（不参与运行时）。
 			__test: { isLocalAbsolute, playerFor, MEDIA_RE, AUDIO_RE },

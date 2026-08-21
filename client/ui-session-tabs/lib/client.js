@@ -13,7 +13,7 @@
 //
 // Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
 window.__ModuleLoader__.load({
-	id: '@mydsh/ui-session-tabs',
+	id: '@wowayou/ui-session-tabs',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -464,13 +464,13 @@ window.__ModuleLoader__.load({
 			g[MOUNT_KEY] = n;
 			ctx.effect(function() {
 				return function() { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); };
-			}, '@mydsh/ui-session-tabs: mount counter');
+			}, '@wowayou/ui-session-tabs: mount counter');
 			if (n > 1) {
 				try {
 					console.warn(
-						'[@mydsh/ui-session-tabs] mounted ' + n + ' times — the plugin row appears more than once in '
+						'[@wowayou/ui-session-tabs] mounted ' + n + ' times — the plugin row appears more than once in '
 						+ 'the composed tree, so this copy registered nothing. Keep ONE install path: either the npm '
-						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-session-tabs`) or the mydsh repo rows in '
+						+ 'bundle layer (`dsh plugin --profile web add @wowayou/ui-session-tabs`) or the mydsh repo rows in '
 						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
 					);
 				} catch {}
@@ -480,7 +480,7 @@ window.__ModuleLoader__.load({
 		}
 
 		module.exports = {
-			name: '@mydsh/ui-session-tabs',
+			name: '@wowayou/ui-session-tabs',
 			inject: ['slots', 'sessions', 'workspaces'],
 			apply(ctx) {
 				var sessions = ctx.get('sessions');
@@ -490,7 +490,7 @@ window.__ModuleLoader__.load({
 					// 静默 return 会让「装上了但什么都没发生」无从排查（例如宿主重命名了服务）。
 					try {
 						console.warn(
-							'[@mydsh/ui-session-tabs] the host exposes no `slots` service — nothing was registered. '
+							'[@wowayou/ui-session-tabs] the host exposes no `slots` service — nothing was registered. '
 							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
 						);
 					} catch {}
@@ -504,7 +504,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-open-tab',
 						order: 30,
 					}, OpenTabAction)),
-					'@mydsh/ui-session-tabs: open-tab action',
+					'@wowayou/ui-session-tabs: open-tab action',
 				);
 				// 2. URL session opener (null component in input dock)
 				ctx.effect(
@@ -513,7 +513,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-url-session',
 						order: 50,
 					}, (props) => UrlSessionOpener({ ...props, sessions }))),
-					'@mydsh/ui-session-tabs: url opener',
+					'@wowayou/ui-session-tabs: url opener',
 				);
 				// 3. "New session in new tab" button at the sidebar foot (beside Settings).
 				//    点击弹出 workspace 选择框：选一个 workspace 后 connectWorkspace(id)
@@ -524,7 +524,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-new-tab',
 						order: 0,
 					}, () => NewTabButton({ wide: ownerProps && ownerProps.wide, workspaces }))),
-					'@mydsh/ui-session-tabs: new-tab footer action',
+					'@wowayou/ui-session-tabs: new-tab footer action',
 				);
 			},
 			// 供 tests 直接驱动的纯逻辑（不参与运行时）。

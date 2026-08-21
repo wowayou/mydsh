@@ -1,6 +1,6 @@
 // mydsh 客户端插件的 npm 打包校验（纯 node，不依赖 harness）。
 //
-// 这四个包要能被社区用 `dsh plugin --profile web add @mydsh/<name>` 一条命令装上，
+// 这四个包要能被社区用 `dsh plugin --profile web add @wowayou/<name>` 一条命令装上，
 // 靠的是 package.json 里的 `dsh.bundle.patch` + 包内 cordis.patch.yml：
 // dsh 装完把包名追加到 profile 的 `dsh.profile.bundles`，再应用这一层把插件行
 // 插进 loader tree。任一环节漏了（patch 文件没进 files、行 id 与 install.sh 不一致、
@@ -37,7 +37,7 @@ for (const name of dirs) {
   if (!existsSync(pkgPath)) { check('package.json 存在', false, pkgPath); continue }
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
 
-  check('name 在 @mydsh scope 下', pkg.name === `@mydsh/${name}`, pkg.name)
+  check('name 在 @wowayou scope 下', pkg.name === `@wowayou/${name}`, pkg.name)
   check('publishConfig.access=public（scoped 包默认私有）', pkg.publishConfig?.access === 'public', JSON.stringify(pkg.publishConfig))
   check('repository.directory 指向本目录', pkg.repository?.directory === `client/${name}`, JSON.stringify(pkg.repository?.directory))
   check('有 license/author/description/keywords', typeof pkg.license === 'string' && typeof pkg.author === 'string'

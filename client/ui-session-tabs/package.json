@@ -1,5 +1,5 @@
 {
-  "name": "@mydsh/ui-session-tabs",
+  "name": "@wowayou/ui-session-tabs",
   "version": "0.1.0",
   "description": "mydsh: open a session in a new browser tab via ?session=<id> deep links — each tab keeps its own selected session",
   "keywords": [

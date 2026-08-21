@@ -29,7 +29,7 @@ DSH 的每个能力都是一条 `cordis.yml` 里的插件行。我的系统 = �
 │             cordis.patch.yml + plugins/
 ├─ 2 预设层  $DSH_HOME/.agent-presets/mydsh/  Agent 预设：一个会话的组成
 │             agent.cordis.yml + preset.yml + plugins/
-└─ 3 客户端层 $DSH_HOME/profiles/node_modules/@mydsh/
+└─ 3 客户端层 $DSH_HOME/profiles/node_modules/@wowayou/
              浏览器插件：通知 / 批注 / 多标签会话 / 视频
 ```
 
@@ -44,13 +44,13 @@ DSH 的每个能力都是一条 `cordis.yml` 里的插件行。我的系统 = �
 | 用户诉求 | 层 | 插件/文件 | 机制 |
 | --- | --- | --- | --- |
 | 任务完成提醒（系统级） | 主机 | `host/notify.ts` | 监听 `agent/status`（running→idle），写 JSONL 日志 + 尽力 `notify-send` |
-| 任务完成提醒（浏览器） | 客户端 | `@mydsh/ui-notify` | `conversation.input.dock` null 组件 + useSession + setInterval 轮询，idle 时 Notification + 提示音 |
-| 自定义提示音 | 客户端 | `@mydsh/ui-notify` | `settings.general.item` 设置卡片：上传音频文件 → localStorage base64，回退 Web Audio beep |
+| 任务完成提醒（浏览器） | 客户端 | `@wowayou/ui-notify` | `conversation.input.dock` null 组件 + useSession + setInterval 轮询，idle 时 Notification + 提示音 |
+| 自定义提示音 | 客户端 | `@wowayou/ui-notify` | `settings.general.item` 设置卡片：上传音频文件 → localStorage base64，回退 Web Audio beep |
 | 主动通知工具 | 预设 | `preset/plugins/notify-tool.ts` | 模型可调 `notify_user(title, body)` 工具 |
 | 视觉理解（modlens） | 预设 | `preset/plugins/vision-tool.ts` | 工具 `vision_describe(path, prompt)`：attachment 提交图片 → `llm.stream`（qwen-vl-max） |
 | 视觉理解（技能层） | 技能 | `skills/vision/{SKILL.md,scripts/dsh-vision.mjs}` | `skill` 工具按需加载指令 → bash 跑零依赖 CLI，直连 provider HTTPS；支持多图/PDF 页/视频帧/上传前缩放/结果缓存 |
-| 多会话新标签页 | 客户端 | `@mydsh/ui-session-tabs` | `conversation.session.header.actions` 会话头「⧉」按钮 + `conversation.input.dock` URL 打开器 |
-| 视频支持 | 客户端 | `@mydsh/ui-video` | `conversation.input.dock` null 组件 + MutationObserver，消息中媒体链接渲染 `<video>` |
+| 多会话新标签页 | 客户端 | `@wowayou/ui-session-tabs` | `conversation.session.header.actions` 会话头「⧉」按钮 + `conversation.input.dock` URL 打开器 |
+| 视频支持 | 客户端 | `@wowayou/ui-video` | `conversation.input.dock` null 组件 + MutationObserver，消息中媒体链接渲染 `<video>` |
 | 非 DeepSeek 模型 full-access 报错 | 部署层补丁 | `patches/sandbox-same-mode-escalation.patch` | 同模式升级视为 no-op 直接放行 |
 | 第三式中转站 403 client_restricted | 部署层补丁 | `patches/user-agent-override.patch` + `patches/per-provider-ua-override.patch` | UA 全局环境变量覆盖 + per-provider headers 优先 |
 
@@ -237,11 +237,23 @@ per-provider headers.user-agent  >  DSH_APP_PRODUCT 环境变量  >  默认 deep
 
 | 环节 | 做法 | 为什么 |
 | --- | --- | --- |
-| scope + 可见性 | `@mydsh/*` + `publishConfig.access: public` | scoped 包默认私有，漏了就发不出去 |
+| scope + 可见性 | `@wowayou/*`（**用户名 scope**）+ `publishConfig.access: public` | scoped 包默认私有，漏了就发不出去。用用户名 scope 而不是 `@mydsh` 组织：组织只能在 npmjs.com 网页上建（`npm org` 只有 `set`/`rm`/`ls`，没有 `create`），多一层要维护的东西；用户名 scope 登录即可发 |
 | 一条命令生效 | 每包声明 `dsh.bundle.patch: './cordis.patch.yml'`，patch 里 `- insert:` 自己的插件行 | `dsh plugin --profile web add <包>` 是 pnpm 转发器 + 状态对账：装完发现包声明了 `dsh.bundle` 就把它追加到 profile 的 `dsh.profile.bundles`，然后应用这一层 —— 用户不用手改 YAML。**不声明**的话 dsh 会打印 "declares no dsh.bundle — installed as a plain dependency" 并要求手工加行 |
 | 包内容 | `files: [lib, cordis.patch.yml, README.md, LICENSE]` | patch 文件忘了进 `files` → 装上去就是「bundle 声明了 patch 但文件不存在」，`profile.ts` 会 fail loud |
-| 预发布 | `@mydsh/ui-annotate` = `0.1.0-preview.1` + `publishConfig.tag: preview` | 它只存 localStorage、模型看不见（见 `POSTMORTEM.md`「不成熟的功能不要放」）；不能占 `latest` |
+| 预发布 | `@wowayou/ui-annotate` = `0.1.0-preview.1` + `publishConfig.tag: preview` | 它只存 localStorage、模型看不见（见 `POSTMORTEM.md`「不成熟的功能不要放」）；不能占 `latest` |
 | 回归 | `tests/npm-packages.mjs`（纯 node） | 以上每一条漏了都不会在本机报错，而是社区装的时候才炸 |
+
+**包名有三处必须完全一致**（改 scope 时这是硬约束，不是风格问题）：
+
+1. `package.json` 的 `name`；
+2. 插件行的 `name:`（dsh 用它当 client module 的 graph row id —— `client/modules`
+   的 `processOne()` 直接把 entry name 当 id 用）；
+3. bundle 里 `window.__ModuleLoader__.load({ id })` 的 `id`。
+
+`system.ts` 的 `arrive()` 在 bundle 执行完之后检查「这个 id 注册了吗」，没注册就抛
+`bundle <url> loaded without registering "<id>"`。所以 `install.sh` 的
+`CLIENT_ROOT`（部署目录的 scope）也必须跟包名同 scope —— 部署副本和 npm 副本是同一份
+`lib/client.js`，里面只有一个 `id`，两条路径不能各用一个 scope。
 
 **两条安装路径互斥**：`install.sh` 把插件行直接写进 profile 自己的
 `cordis.patch.yml`；npm 装的话行来自包的 bundle 层。两条都走 → 组合后的 tree 里
@@ -251,7 +263,7 @@ per-provider headers.user-agent  >  DSH_APP_PRODUCT 环境变量  >  默认 deep
 **ui-video 只有浏览器半边**：播放地址 `/mydsh-media/<路径>` 由主机层 `host/media.ts`
 提供（媒体扩展名白名单 + Origin 校验 + Range）。没把它一起塞进 npm 包，是因为那份
 是安全相关代码，复制成两份就是 `vision-core` 之前那种负债；要做就单独发
-`@mydsh/host-media` 让 ui-video 依赖它 —— 留待需要时再做。README 里写明前提。
+`@wowayou/host-media` 让 ui-video 依赖它 —— 留待需要时再做。README 里写明前提。
 
 ### 6b.1 「不伤害安装者」清单（2026-08-21）
 
@@ -314,7 +326,7 @@ mydsh/
 | 目标 | 位置 | 生效方式 |
 | --- | --- | --- |
 | 主机插件 | `~/.dsh/profiles/web/plugins/*.ts`，行加进 `cordis.patch.yml` | 配置文件热重载（需 `--expose-internals`）|
-| 客户端插件 | `~/.dsh/profiles/node_modules/@mydsh/*`（真实目录，heal 不删） | 刷新页面加载；bundle 内容变更经 dev:web/HMR |
+| 客户端插件 | `~/.dsh/profiles/node_modules/@wowayou/*`（真实目录，heal 不删） | 刷新页面加载；bundle 内容变更经 dev:web/HMR |
 | Agent 预设 | `~/.dsh/.agent-presets/mydsh/` | 新会话选择该预设 |
 | 补丁 | checkout 源文件 | 重启 dsh 进程生效（dev 态 tsx 直接读源码） |
 

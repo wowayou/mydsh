@@ -935,3 +935,64 @@ dsh 页面上」把它们重审一遍，逐条堵掉**只在别人机器上才�
   （`@mydsh/ui-annotate` 带 `--tag preview`）。不可逆的对外动作，等你点头。
 - `~/.dsh/profiles/node_modules/@mydsh/ui-annotate` 有个早先留下的空壳目录，
   没有任何 patch 行引用它（处于惰性状态）。删它属于删数据，等授权。
+
+---
+
+## 2026-08-21 scope 退回用户名：@mydsh/* → @wowayou/*
+
+### 做了什么
+发布前把四个包从组织 scope `@mydsh/*` 改成用户名 scope `@wowayou/*`，理由是
+**不想为四个包维护一个 npm 组织**：`@mydsh` 需要先在 npmjs.com 网页上建组织
+（`npm org` 只有 `set`/`rm`/`ls`，**没有 `create`**），而用户名 scope 登录即可发。
+
+改到的地方：四个 `package.json` 的 `name`、四个包内 `cordis.patch.yml` 的 `name:`、
+四个 `lib/client.js` 里 `__ModuleLoader__.load({ id })` 与所有 `console.warn` 前缀和
+`ctx.effect` 标签、五份 README、`manifest.json`、`install.sh`（`CLIENT_ROOT` 与
+marker 块里的插件行）、`host/notify.ts` 与 `host/media.ts` 的注释、
+`tests/npm-packages.mjs` 的断言、`docs/design.md`。
+
+**没动**（改了会伤数据或破契约）：`localStorage` 键 `mydsh.notify.*` /
+`mydsh.annotations.v1`（改了等于把现有用户的设置和批注孤儿化）、
+`__mydshUi*Mounts` 挂载计数键、cordis 插件行 `id: mydsh-ui-*`、
+主机路由 `/mydsh-media/` 与 `data-mydsh-media` 标记。项目本身还叫 mydsh，
+只有「npm 上的包名」换了。
+
+### 关键机制
+**包名有三处必须完全一致**，这是硬约束：`package.json` 的 `name`、插件行的
+`name:`、bundle 里 `__ModuleLoader__.load({ id })` 的 `id`。查了 harness 源码确认：
+`packages/client/modules/src/index.ts` 的 `processOne()` 直接把插件 entry name 当
+client module 的 graph row id（`graphRow(entryName, …)`），而
+`src/client/system.ts` 的 `arrive()` 在 bundle 执行完之后检查这个 id 是否注册，
+没注册就抛 `bundle <url> loaded without registering "<id>"`。
+
+推论：**`install.sh` 的 `CLIENT_ROOT` 也必须跟包名同 scope**。部署副本和 npm 副本
+是同一份 `lib/client.js`（只有一个 `id`），所以不能「仓库部署走 `@mydsh`、npm 走
+`@wowayou`」—— 那样仓库这条路径一加载就抛。这一条写进了 design.md §6b，
+以后再改 scope 不用重新查源码。
+
+### 踩到的坑
+1. **批量 sed 的过滤器写错，把 journal 也改了**：`grep -rl` 在这里输出的路径**不带**
+   `./` 前缀，`grep -v '^./docs/journal.md'` 因此没排除掉它，历史记录里的
+   `@mydsh/*` 被一并改写。journal 是追加式过程日志，改历史就失真了，
+   `git checkout -- docs/journal.md` 还原，改用本条新记录说明这次改名。
+2. **上一条 journal 里有个错误说法**：说 `~/.dsh/…/node_modules/@mydsh/ui-annotate`
+   是「早先留下的空壳目录」。其实不是残留 —— `install.sh` 第 3 步是
+   `for pkg in client/*/` 全量拷贝，四个包都会部署，只有**插件行**里不含
+   ui-annotate（所以它被部署但不激活）。现在 `@wowayou/` 下同样是四个目录。
+
+### 验证
+- 三处一致性逐包核对：`@wowayou/ui-{annotate,notify,session-tabs,video}` 的包名 /
+  loader id / patch name 完全对齐；部署副本里读出的 id 也是 `@wowayou/ui-notify`。
+- 六套测试全绿：`npm-packages` / `check-preset` / `vision-cli`（纯 node）、
+  `smoke` / `stress` / `stress2`（harness 内，0 告警）。
+- `npm pack --dry-run` × 4 仍是各 6 个文件。
+- `bash install.sh --no-patch` 重部署：`node_modules/@wowayou/` 下四个包就位，
+  patch 行三条都指向 `@wowayou/*`。
+- registry 上 `@wowayou/ui-*` 四个名字均 404（未占用）。
+
+### 还没做
+- **发布**：`npm whoami` 仍是 `ENEEDAUTH`，需要你 `npm login`（交互式，我跑不了）。
+  登录后要先确认 `npm whoami` 输出**正好是 `wowayou`** —— 用户名 scope 只有和
+  账号名一致才发得出去，否则得换成实际用户名的 scope。
+- 旧的 `~/.dsh/profiles/node_modules/@mydsh/`（四个目录）现在没有任何 patch 行引用，
+  处于惰性状态。删它属于删数据，等授权。

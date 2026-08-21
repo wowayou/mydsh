@@ -13,7 +13,7 @@
  * 挂在 `~/.dsh/profiles/web/cordis.patch.yml`（或 home patch），随 patch 热重载。
  * 不发布任何服务 —— 纯监听行，符合 preset/host 分层规则（跨会话行为 → host）。
  *
- * 浏览器侧的可视提醒由客户端插件 `@mydsh/ui-notify` 负责（Notification API + 提示音）。
+ * 浏览器侧的可视提醒由客户端插件 `@wowayou/ui-notify` 负责（Notification API + 提示音）。
  * 浏览器侧还覆盖 question / plan-review 两类打断（读 sessions.list 的 pendingInteraction
  * 投影），host 侧只覆盖 approval/asked（question 不写 session 日志，host 监听不到）。
  */

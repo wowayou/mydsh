@@ -11,9 +11,9 @@
       { "from": "lib/vision-core.mjs", "to": "$DSH_HOME/.agent-presets/mydsh/plugins/lib/ + $DSH_HOME/skills/vision/scripts/lib/", "kind": "shared-lib", "note": "视觉共用核心（路径限制/素材准备/结果缓存/审计）；仓库里两处消费点是符号链接，install.sh 用 rsync --copy-unsafe-links 落成真实文件" },
       { "from": "host/notify.ts", "to": "$DSH_HOME/profiles/web/plugins/notify.ts", "kind": "host-plugin", "note": "任务完成通知监听（agent/status → JSONL + notify-send）" },
       { "from": "host/media.ts", "to": "$DSH_HOME/profiles/web/plugins/media.ts", "kind": "host-plugin", "note": "/mydsh-media 本地媒体路由（视频播放用，带 Range）" },
-      { "from": "client/ui-notify/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-notify/", "kind": "client-plugin", "note": "浏览器完成通知（Notification API + 提示音）" },
-      { "from": "client/ui-session-tabs/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-session-tabs/", "kind": "client-plugin", "note": "多会话新标签页（?session= 深链）" },
-      { "from": "client/ui-video/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-video/", "kind": "client-plugin", "note": "消息内本地视频/音频播放" },
+      { "from": "client/ui-notify/", "to": "$DSH_HOME/profiles/node_modules/@wowayou/ui-notify/", "kind": "client-plugin", "note": "浏览器完成通知（Notification API + 提示音）" },
+      { "from": "client/ui-session-tabs/", "to": "$DSH_HOME/profiles/node_modules/@wowayou/ui-session-tabs/", "kind": "client-plugin", "note": "多会话新标签页（?session= 深链）" },
+      { "from": "client/ui-video/", "to": "$DSH_HOME/profiles/node_modules/@wowayou/ui-video/", "kind": "client-plugin", "note": "消息内本地视频/音频播放" },
       { "from": "patches/sandbox-same-mode-escalation.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "sandbox 同模式升级 no-op（修复非 DeepSeek 模型 full-access 报错）" },
       { "from": "patches/user-agent-override.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "User-Agent 全局环境变量覆盖（DSH_APP_PRODUCT / DSH_APP_URL）" },
       { "from": "patches/per-provider-ua-override.patch", "to": "deepseek-harness checkout", "kind": "checkout-patch", "note": "Per-provider UA 覆盖（provider profile headers.user-agent 优先）" }
@@ -24,14 +24,14 @@
     }
   },
   "npm": {
-    "note": "四个浏览器插件同时是可发布的 npm 包（scope @mydsh，publishConfig.access=public）；每包带 dsh.bundle.patch + 包内 cordis.patch.yml，`dsh plugin --profile web add <包>` 装完即生效。与仓库部署（install.sh 写 patch 行）二选一：两条都走会在组合 tree 里出现两行同 id 的插件行。",
+    "note": "四个浏览器插件同时是可发布的 npm 包（scope @wowayou（用户名 scope，不需要建组织），publishConfig.access=public）；每包带 dsh.bundle.patch + 包内 cordis.patch.yml，`dsh plugin --profile web add <包>` 装完即生效。与仓库部署（install.sh 写 patch 行）二选一：两条都走会在组合 tree 里出现两行同 id 的插件行。",
     "packages": [
-      { "name": "@mydsh/ui-notify", "dir": "client/ui-notify", "version": "0.1.0", "tag": "latest" },
-      { "name": "@mydsh/ui-session-tabs", "dir": "client/ui-session-tabs", "version": "0.1.0", "tag": "latest" },
-      { "name": "@mydsh/ui-video", "dir": "client/ui-video", "version": "0.1.0", "tag": "latest", "note": "只有浏览器半边；播放地址由 host/media.ts 提供，需仓库部署" },
-      { "name": "@mydsh/ui-annotate", "dir": "client/ui-annotate", "version": "0.1.0-preview.1", "tag": "preview", "note": "install.sh 不部署：批注只存 localStorage、模型看不见（docs/POSTMORTEM.md「不成熟的功能不要放」）" }
+      { "name": "@wowayou/ui-notify", "dir": "client/ui-notify", "version": "0.1.0", "tag": "latest" },
+      { "name": "@wowayou/ui-session-tabs", "dir": "client/ui-session-tabs", "version": "0.1.0", "tag": "latest" },
+      { "name": "@wowayou/ui-video", "dir": "client/ui-video", "version": "0.1.0", "tag": "latest", "note": "只有浏览器半边；播放地址由 host/media.ts 提供，需仓库部署" },
+      { "name": "@wowayou/ui-annotate", "dir": "client/ui-annotate", "version": "0.1.0-preview.1", "tag": "preview", "note": "install.sh 不部署：批注只存 localStorage、模型看不见（docs/POSTMORTEM.md「不成熟的功能不要放」）" }
     ],
-    "publish": "npm login && npm org create mydsh（scope 需先存在）→ 各包目录 npm publish；@mydsh/ui-annotate 用 --tag preview"
+    "publish": "npm login → 各包目录 npm publish；@wowayou/ui-annotate 用 --tag preview。用户名 scope 无需建组织（npm 也没有 org create 命令，建组织只能在 npmjs.com 网页上做）"
   },
   "docs": {
     "design": "docs/design.md",

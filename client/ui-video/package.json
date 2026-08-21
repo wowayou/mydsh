@@ -1,5 +1,5 @@
 {
-  "name": "@mydsh/ui-video",
+  "name": "@wowayou/ui-video",
   "version": "0.1.0",
   "description": "mydsh: render local video/audio files referenced in messages as playable <video>/<audio> via the /mydsh-media host route",
   "keywords": [

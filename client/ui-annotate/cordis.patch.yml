@@ -1,8 +1,8 @@
-# @mydsh/ui-annotate 的 bundle patch 层（见 ui-notify 的同名文件说明）。
+# @wowayou/ui-annotate 的 bundle patch 层（见 ui-notify 的同名文件说明）。
 #
 # 注意：本包是 preview —— 批注只存 localStorage，不进对话历史，模型看不见。
 # mydsh 自己的 install.sh 不部署它（见仓库 docs/POSTMORTEM.md「不成熟的功能
 # 不要放」）。装它是你显式的选择。
 - insert:
     - id: mydsh-ui-annotate
-      name: '@mydsh/ui-annotate'
+      name: '@wowayou/ui-annotate'

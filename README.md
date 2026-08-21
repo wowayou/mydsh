@@ -53,10 +53,10 @@ The four browser plugins are standalone npm packages. Each one declares
 plugin row — no YAML editing:
 
 ```bash
-dsh plugin --profile web add @mydsh/ui-notify
-dsh plugin --profile web add @mydsh/ui-session-tabs
-dsh plugin --profile web add @mydsh/ui-video          # needs the host media route, see below
-dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview: notes are localStorage-only
+dsh plugin --profile web add @wowayou/ui-notify
+dsh plugin --profile web add @wowayou/ui-session-tabs
+dsh plugin --profile web add @wowayou/ui-video          # needs the host media route, see below
+dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview: notes are localStorage-only
 
 # pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w
 # verify: dsh --profile web --dump-config | grep mydsh
@@ -64,10 +64,10 @@ dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview: notes are l
 
 | Package | What it is | Extra requirement |
 | --- | --- | --- |
-| [`@mydsh/ui-notify`](client/ui-notify) | Completion notification + sound, works in background tabs | — |
-| [`@mydsh/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` deep links, one session per tab, new-session-in-new-tab | — |
-| [`@mydsh/ui-video`](client/ui-video) | Local video/audio links become players | host `/mydsh-media` route (`host/media.ts`, repo install) |
-| [`@mydsh/ui-annotate`](client/ui-annotate) | Notes on assistant replies | preview — model cannot see the notes |
+| [`@wowayou/ui-notify`](client/ui-notify) | Completion notification + sound, works in background tabs | — |
+| [`@wowayou/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` deep links, one session per tab, new-session-in-new-tab | — |
+| [`@wowayou/ui-video`](client/ui-video) | Local video/audio links become players | host `/mydsh-media` route (`host/media.ts`, repo install) |
+| [`@wowayou/ui-annotate`](client/ui-annotate) | Notes on assistant replies | preview — model cannot see the notes |
 
 **Pick one path, not both.** `./install.sh` writes the same plugin rows into
 `$DSH_HOME/profiles/web/cordis.patch.yml` directly. Doing both puts two rows with the same
@@ -81,7 +81,7 @@ no network, no telemetry, no `postinstall`, no host code patched or wrapped; the
 is `localStorage` under `mydsh.*`, size-capped so the origin quota shared with the dsh UI
 cannot be exhausted; a missing UI slot or service degrades to one `console.warn`; every
 package documents the dsh version it was verified against (`0.1.0-rc.5`) and its uninstall
-command. `@mydsh/ui-annotate` is `preview` on purpose — read its README first.
+command. `@wowayou/ui-annotate` is `preview` on purpose — read its README first.
 
 ### Install everything from the repo (host plugins, preset, skill)
 
@@ -167,7 +167,7 @@ mydsh/
 ├── up.sh                          # One-command deploy + restart + media verification
 ├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
 ├── tests/vision-cli.mjs           # Vision skill CLI tests (plain `node`, no harness deps)
-├── tests/npm-packages.mjs         # npm packaging checks for the four @mydsh client packages
+├── tests/npm-packages.mjs         # npm packaging checks for the four @wowayou client packages
 └── manifest.json                  # File → deploy target manifest
 ```
 
@@ -226,7 +226,7 @@ mydsh/
 ├── up.sh                          # 一键部署 + 重启 + media 边界验证
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
 ├── tests/vision-cli.mjs           # 视觉技能 CLI 测试（纯 node，不依赖 harness）
-├── tests/npm-packages.mjs         # 四个 @mydsh 客户端包的 npm 打包校验（纯 node）
+├── tests/npm-packages.mjs         # 四个 @wowayou 客户端包的 npm 打包校验（纯 node）
 └── manifest.json                  # 文件 → 部署目标清单
 ```
 
@@ -283,10 +283,10 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 所以 `dsh plugin` 装完即生效，不用手改 YAML：
 
 ```bash
-dsh plugin --profile web add @mydsh/ui-notify
-dsh plugin --profile web add @mydsh/ui-session-tabs
-dsh plugin --profile web add @mydsh/ui-video              # 需要主机层媒体路由，见下
-dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview：批注只存 localStorage
+dsh plugin --profile web add @wowayou/ui-notify
+dsh plugin --profile web add @wowayou/ui-session-tabs
+dsh plugin --profile web add @wowayou/ui-video              # 需要主机层媒体路由，见下
+dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview：批注只存 localStorage
 
 # pnpm 9 会拒绝往 workspace root 加依赖（ERR_PNPM_ADDING_TO_ROOT）→ 加 -w
 # 验证：dsh --profile web --dump-config | grep mydsh
@@ -294,10 +294,10 @@ dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview：批注只�
 
 | 包 | 是什么 | 额外前提 |
 | --- | --- | --- |
-| [`@mydsh/ui-notify`](client/ui-notify) | 完成提醒 + 提示音（后台标签页也响） | — |
-| [`@mydsh/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` 深链、每标签页各选各的会话、新标签页新建会话 | — |
-| [`@mydsh/ui-video`](client/ui-video) | 消息里的本地媒体链接渲染成播放器 | 主机层 `/mydsh-media` 路由（`host/media.ts`，走仓库部署） |
-| [`@mydsh/ui-annotate`](client/ui-annotate) | 助手回复批注 | preview —— 模型看不见批注 |
+| [`@wowayou/ui-notify`](client/ui-notify) | 完成提醒 + 提示音（后台标签页也响） | — |
+| [`@wowayou/ui-session-tabs`](client/ui-session-tabs) | `?session=<id>` 深链、每标签页各选各的会话、新标签页新建会话 | — |
+| [`@wowayou/ui-video`](client/ui-video) | 消息里的本地媒体链接渲染成播放器 | 主机层 `/mydsh-media` 路由（`host/media.ts`，走仓库部署） |
+| [`@wowayou/ui-annotate`](client/ui-annotate) | 助手回复批注 | preview —— 模型看不见批注 |
 
 **两条路径只选一条。** `./install.sh` 会把同样的插件行直接写进
 `$DSH_HOME/profiles/web/cordis.patch.yml`；两条都走 → 组合后的 tree 里同一个 id 出现两行
@@ -308,7 +308,7 @@ dsh plugin --profile web add @mydsh/ui-annotate@preview   # preview：批注只�
 **对安装者的承诺**（这些代码跑在别人的页面上）：不联网、无遥测、无 `postinstall`、
 不改也不包宿主代码；只用 `mydsh.*` 的 `localStorage` 键且都有体积上限（origin 配额是和
 dsh UI 共享的，不能被插件吃满）；拿不到 UI 槽位/服务时退化成一条 `console.warn`；
-每个包都写明验证过的 dsh 版本（`0.1.0-rc.5`）与卸载命令。`@mydsh/ui-annotate` 故意留在
+每个包都写明验证过的 dsh 版本（`0.1.0-rc.5`）与卸载命令。`@wowayou/ui-annotate` 故意留在
 `preview`，装之前先读它的 README。
 
 主机插件 / 预设 / 技能仍然只从仓库装（`./install.sh`）—— 它们要落到 `$DSH_HOME` 的

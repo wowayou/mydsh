@@ -1,4 +1,4 @@
-# @mydsh/ui-notify
+# @wowayou/ui-notify
 
 Browser-side **task completion notification** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh): when an agent turn finishes, the tab raises a `Notification` and plays a sound — including when the tab is in the background.
 
@@ -7,10 +7,10 @@ Part of [mydsh](https://github.com/wowayou/mydsh). Hand-written `__ModuleLoader_
 ## Install
 
 ```bash
-dsh plugin --profile web add @mydsh/ui-notify
+dsh plugin --profile web add @wowayou/ui-notify
 
 # pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w:
-#   dsh plugin --profile web add -w @mydsh/ui-notify
+#   dsh plugin --profile web add -w @wowayou/ui-notify
 
 # check the row made it into the composed tree:
 #   dsh --profile web --dump-config | grep mydsh
@@ -25,7 +25,7 @@ Manual alternative — add the row to `$DSH_HOME/profiles/web/cordis.patch.yml`:
 ```yaml
 - insert:
     - id: mydsh-ui-notify
-      name: '@mydsh/ui-notify'
+      name: '@wowayou/ui-notify'
 ```
 
 ## What you get
@@ -65,7 +65,7 @@ the same tab also pings.
   future dsh renames or drops a slot, the plugin logs one `console.warn` and does nothing
   else — it never patches or wraps host code, so it cannot break the host UI.
 - Best-effort, single-maintainer, in the open — issues welcome, no SLA.
-- Uninstall: `dsh plugin --profile web remove @mydsh/ui-notify`, then reload the tab.
+- Uninstall: `dsh plugin --profile web remove @wowayou/ui-notify`, then reload the tab.
   (Custom sound and mute state stay in `localStorage`; clear the `mydsh.notify.*` keys to
   drop them too.)
 
@@ -76,7 +76,7 @@ DSH 的**任务完成提醒**（浏览器端）：一轮 agent 结束时弹 `Not
 通知标题带会话名，多任务不混；后台标签页标题闪 `[✓] 任务名`；点击通知定位并打开该会话；
 多标签跨标签去重（同一次完成只响一次）；提示音可在 设置 → 通用 里换成自定义音频。
 
-安装：`dsh plugin --profile web add @mydsh/ui-notify`（pnpm 9 会要求加 `-w`），然后刷新页面。
+安装：`dsh plugin --profile web add @wowayou/ui-notify`（pnpm 9 会要求加 `-w`），然后刷新页面。
 
 需要通知权限；Chromium 的自动播放策略要求标签页里先有过一次用户交互，声音才会响。
 不联网、无遥测，只用 `localStorage` 的 `mydsh.notify.*`。自定义音频有 **512 KB 上限**
@@ -85,7 +85,7 @@ DSH 的**任务完成提醒**（浏览器端）：一轮 agent 结束时弹 `Not
 
 对 dsh `0.1.0-rc.5`（web profile）验证过；按插件行名字注册 UI 槽位，宿主换名字最多打一条
 `console.warn`，不改也不包宿主代码，不会把 UI 弄坏。个人维护、尽力而为、无 SLA。
-卸载：`dsh plugin --profile web remove @mydsh/ui-notify`，然后刷新页面。
+卸载：`dsh plugin --profile web remove @wowayou/ui-notify`，然后刷新页面。
 两条安装路径都装了的话，重复那份不注册任何东西，只打一条告警告诉你该去掉哪条 —— 不会响两声。
 
 ## License

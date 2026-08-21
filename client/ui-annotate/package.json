@@ -1,5 +1,5 @@
 {
-  "name": "@mydsh/ui-annotate",
+  "name": "@wowayou/ui-annotate",
   "version": "0.1.0-preview.1",
   "description": "mydsh (PREVIEW, not deployed by install.sh): codex-like annotations on assistant replies — notes live in localStorage only and are NOT visible to the model",
   "keywords": [

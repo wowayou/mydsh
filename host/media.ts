@@ -3,7 +3,7 @@
  *
  * 注册 `/mydsh-media/*` 路由：把客户端传来的本地文件绝对路径（encodeURIComponent
  * 编码为单个 path 段）流式返回，带 Content-Type 与 Range 支持（视频拖动进度条必需）。
- * 供 `@mydsh/ui-video` 浏览器插件把消息里的视频链接渲染成可播放的 <video>。
+ * 供 `@wowayou/ui-video` 浏览器插件把消息里的视频链接渲染成可播放的 <video>。
  *
  * 安全边界（2026-08-17 收紧，见 docs/journal.md）：
  *   1. 服务器只绑定 127.0.0.1（harness 明确拒绝 --host 0.0.0.0）：

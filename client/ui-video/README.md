@@ -1,4 +1,4 @@
-# @mydsh/ui-video
+# @wowayou/ui-video
 
 **Play local video/audio referenced in a conversation** on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh): a link to a local media file in a message is replaced by a real `<video>`/`<audio>` player.
 
@@ -19,10 +19,10 @@ through to the file and you know why nothing played.
 ## Install
 
 ```bash
-dsh plugin --profile web add @mydsh/ui-video
+dsh plugin --profile web add @wowayou/ui-video
 
 # pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w:
-#   dsh plugin --profile web add -w @mydsh/ui-video
+#   dsh plugin --profile web add -w @wowayou/ui-video
 
 # check the row made it into the composed tree:
 #   dsh --profile web --dump-config | grep mydsh
@@ -34,7 +34,7 @@ Then reload the browser tab. Manual alternative — add the row to
 ```yaml
 - insert:
     - id: mydsh-ui-video
-      name: '@mydsh/ui-video'
+      name: '@wowayou/ui-video'
 ```
 
 ## Usage
@@ -66,7 +66,7 @@ unloading the plugin disconnects it — and no globals are left on `window`.
 - Installed twice (npm bundle layer **and** mydsh's repo rows), the duplicate copy starts no
   observer and logs one `console.warn` naming the fix.
 - Best-effort, single-maintainer, in the open — issues welcome, no SLA.
-- Uninstall: `dsh plugin --profile web remove @mydsh/ui-video`, then reload the tab.
+- Uninstall: `dsh plugin --profile web remove @wowayou/ui-video`, then reload the tab.
 
 ## 中文
 
@@ -77,14 +77,14 @@ DSH 的**本地视频/音频播放**：消息里用绝对路径写的媒体链�
 只服务媒体扩展名、带 Origin 校验与 Range 支持），**不在本 npm 包内** ——
 只装本包会渲染出播放器但取不到数据。请用仓库的 `./install.sh` 部署主机半边。
 
-安装：`dsh plugin --profile web add @mydsh/ui-video`（pnpm 9 会要求加 `-w`），然后刷新页面。
+安装：`dsh plugin --profile web add @wowayou/ui-video`（pnpm 9 会要求加 `-w`），然后刷新页面。
 
 只装浏览器半边也不会「坏掉」：播放器取不到数据时会自己隐藏，把原链接显示回来并附一句原因，
 你照样点得开文件。只改写「单个前导斜杠的绝对路径」链接（正是主机层路由能接受的形状），
 `http(s)`/`data:`/`blob:`/`javascript:`/协议相对（`//host/x.mp4`）/相对路径一律不动。
 对 dsh `0.1.0-rc.5` 验证过；只观察 DOM、只插自己的节点，不改宿主代码，也不往 `window` 挂全局名。
 两条安装路径都装了的话，重复那份不启动 observer，只打一条告警。个人维护、尽力而为、无 SLA。
-卸载：`dsh plugin --profile web remove @mydsh/ui-video`，然后刷新页面。
+卸载：`dsh plugin --profile web remove @wowayou/ui-video`，然后刷新页面。
 
 ## License
 

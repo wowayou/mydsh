@@ -9,7 +9,7 @@
 //   - 数据存 localStorage（key = mydsh.annotations.v1，按 sessionId:messageId 分桶），
 //     不依赖任何后端；v2 可升级为 host 存储 + 模型可见。
 window.__ModuleLoader__.load({
-	id: '@mydsh/ui-annotate',
+	id: '@wowayou/ui-annotate',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -52,7 +52,7 @@ window.__ModuleLoader__.load({
 				localStorage.setItem(STORAGE_KEY, json);
 				return 'ok';
 			} catch {
-				try { console.warn('[@mydsh/ui-annotate] localStorage rejected the write (origin quota is shared with the dsh UI)'); } catch {}
+				try { console.warn('[@wowayou/ui-annotate] localStorage rejected the write (origin quota is shared with the dsh UI)'); } catch {}
 				return 'quota';
 			}
 		}
@@ -239,11 +239,11 @@ window.__ModuleLoader__.load({
 			const n = (g[MOUNT_KEY] || 0) + 1;
 			g[MOUNT_KEY] = n;
 			ctx.effect(() => () => { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); },
-				'@mydsh/ui-annotate: mount counter');
+				'@wowayou/ui-annotate: mount counter');
 			if (n > 1) {
 				try {
 					console.warn(
-						'[@mydsh/ui-annotate] mounted ' + n + ' times — the plugin row appears more than once in '
+						'[@wowayou/ui-annotate] mounted ' + n + ' times — the plugin row appears more than once in '
 						+ 'the composed tree, so this copy registered nothing. Keep ONE install path and check with '
 						+ '`dsh --profile web --dump-config`.',
 					);
@@ -254,14 +254,14 @@ window.__ModuleLoader__.load({
 		}
 
 		module.exports = {
-			name: '@mydsh/ui-annotate',
+			name: '@wowayou/ui-annotate',
 			inject: ['slots'],
 			apply(ctx) {
 				const slots = ctx.get('slots');
 				if (slots === undefined) {
 					try {
 						console.warn(
-							'[@mydsh/ui-annotate] the host exposes no `slots` service — nothing was registered. '
+							'[@wowayou/ui-annotate] the host exposes no `slots` service — nothing was registered. '
 							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
 						);
 					} catch {}
@@ -274,7 +274,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-annotate',
 						order: 15,
 					}, AnnotateAction)),
-					'@mydsh/ui-annotate: assistant action',
+					'@wowayou/ui-annotate: assistant action',
 				);
 			},
 			// 供 tests 直接驱动的纯逻辑（不参与运行时）。

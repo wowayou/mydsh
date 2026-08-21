@@ -1,4 +1,4 @@
-# @mydsh/ui-session-tabs 的 bundle patch 层（见 ui-notify 的同名文件说明）。
+# @wowayou/ui-session-tabs 的 bundle patch 层（见 ui-notify 的同名文件说明）。
 - insert:
     - id: mydsh-ui-session-tabs
-      name: '@mydsh/ui-session-tabs'
+      name: '@wowayou/ui-session-tabs'

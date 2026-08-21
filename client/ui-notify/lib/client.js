@@ -19,7 +19,7 @@
 //
 // Hand-written __ModuleLoader__ bundle (zero build deps): only requires react.
 window.__ModuleLoader__.load({
-	id: '@mydsh/ui-notify',
+	id: '@wowayou/ui-notify',
 	factory: (require) => {
 		var module = { exports: {} };
 		var exports = module.exports;
@@ -452,7 +452,7 @@ window.__ModuleLoader__.load({
 					var code = e2 && e2.code;
 					setErr(code === 'too-big' ? T.tooBig : code === 'read-failed' ? T.readFailed : T.quotaFull);
 					setCustomUrl(loadCustomSound());
-					try { console.warn('[@mydsh/ui-notify] custom sound not saved:', e2 && e2.message); } catch {}
+					try { console.warn('[@wowayou/ui-notify] custom sound not saved:', e2 && e2.message); } catch {}
 				});
 				if (fileRef.current) fileRef.current.value = '';
 			}, []);
@@ -569,13 +569,13 @@ window.__ModuleLoader__.load({
 			// 计数跟着插件生命周期回落，HMR / 卸载重挂不会假报重复。
 			ctx.effect(function() {
 				return function() { g[MOUNT_KEY] = Math.max(0, (g[MOUNT_KEY] || 1) - 1); };
-			}, '@mydsh/ui-notify: mount counter');
+			}, '@wowayou/ui-notify: mount counter');
 			if (n > 1) {
 				try {
 					console.warn(
-						'[@mydsh/ui-notify] mounted ' + n + ' times — the plugin row appears more than once in '
+						'[@wowayou/ui-notify] mounted ' + n + ' times — the plugin row appears more than once in '
 						+ 'the composed tree, so this copy registered nothing. Keep ONE install path: either the npm '
-						+ 'bundle layer (`dsh plugin --profile web add @mydsh/ui-notify`) or the mydsh repo rows in '
+						+ 'bundle layer (`dsh plugin --profile web add @wowayou/ui-notify`) or the mydsh repo rows in '
 						+ '$DSH_HOME/profiles/web/cordis.patch.yml — not both. Check with `dsh --profile web --dump-config`.',
 					);
 				} catch {}
@@ -585,7 +585,7 @@ window.__ModuleLoader__.load({
 		}
 
 		module.exports = {
-			name: '@mydsh/ui-notify',
+			name: '@wowayou/ui-notify',
 			inject: ['slots', 'sessions'],
 			apply(ctx) {
 				var sessions = ctx.get('sessions');
@@ -594,7 +594,7 @@ window.__ModuleLoader__.load({
 					// 静默 return 会让「装上了但什么都没发生」无从排查（例如宿主重命名了服务）。
 					try {
 						console.warn(
-							'[@mydsh/ui-notify] the host exposes no `slots` service — nothing was registered. '
+							'[@wowayou/ui-notify] the host exposes no `slots` service — nothing was registered. '
 							+ 'This build targets the dsh web profile (verified against dsh 0.1.0-rc.5).',
 						);
 					} catch {}
@@ -607,7 +607,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-notify',
 						order: 100,
 					}, (props) => NotifyWatcher({ ...props, sessions }))),
-					'@mydsh/ui-notify: dock watcher',
+					'@wowayou/ui-notify: dock watcher',
 				);
 				ctx.effect(
 					() => slots.inject('settings.general.item', () => slots.register({
@@ -615,7 +615,7 @@ window.__ModuleLoader__.load({
 						id: 'mydsh-notify-sound',
 						order: 20,
 					}, SoundSettings)),
-					'@mydsh/ui-notify: sound settings',
+					'@wowayou/ui-notify: sound settings',
 				);
 			},
 			// 供 tests/smoke.mjs 直接驱动的纯逻辑（不参与运行时）。

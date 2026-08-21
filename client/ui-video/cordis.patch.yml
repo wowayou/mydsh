@@ -1,4 +1,4 @@
-# @mydsh/ui-video 的 bundle patch 层（见 ui-notify 的同名文件说明）。
+# @wowayou/ui-video 的 bundle patch 层（见 ui-notify 的同名文件说明）。
 #
 # 注意：本包只是浏览器半边（把消息里的本地媒体链接换成播放器）。播放地址
 # `/mydsh-media/<路径>` 由主机层插件提供（mydsh 仓库的 host/media.ts，带
@@ -6,4 +6,4 @@
 # 没装主机路由时播放器会渲染出来但取不到数据。见 README。
 - insert:
     - id: mydsh-ui-video
-      name: '@mydsh/ui-video'
+      name: '@wowayou/ui-video'

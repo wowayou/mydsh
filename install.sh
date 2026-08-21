@@ -27,7 +27,7 @@ SKILLS_DIR="$DSH_HOME/skills"
 PRESET_NM="$DSH_HOME/.agent-presets/node_modules"
 PROFILE_NM="$DSH_HOME/profiles/node_modules"
 HOST_PLUGIN_DIR="$PROFILE_DIR/plugins"
-CLIENT_ROOT="$DSH_HOME/profiles/node_modules/@mydsh"
+CLIENT_ROOT="$DSH_HOME/profiles/node_modules/@wowayou"
 DRY=0
 DO_PATCH=1
 
@@ -167,13 +167,13 @@ block = f"""{start}
     - id: mydsh-media
       name: './plugins/media.ts'
       inject: [webServer]
-    # mydsh client: 浏览器插件（包位于 profiles/node_modules/@mydsh）
+    # mydsh client: 浏览器插件（包位于 profiles/node_modules/@wowayou）
     - id: mydsh-ui-notify
-      name: '@mydsh/ui-notify'
+      name: '@wowayou/ui-notify'
     - id: mydsh-ui-session-tabs
-      name: '@mydsh/ui-session-tabs'
+      name: '@wowayou/ui-session-tabs'
     - id: mydsh-ui-video
-      name: '@mydsh/ui-video'
+      name: '@wowayou/ui-video'
 {end}
 """
 with open(path, encoding='utf-8') as f:
