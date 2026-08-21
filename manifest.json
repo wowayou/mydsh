@@ -7,6 +7,7 @@
     "script": "install.sh",
     "targets": [
       { "from": "preset/", "to": "$DSH_HOME/.agent-presets/mydsh/", "kind": "agent-preset", "note": "mydsh agent 预设（标准模式的私人定制版）" },
+      { "from": "skills/", "to": "$DSH_HOME/skills/", "kind": "skill", "note": "技能包（vision：本地图片/PDF/视频 → 文字，供纯文本模型使用）" },
       { "from": "host/notify.ts", "to": "$DSH_HOME/profiles/web/plugins/notify.ts", "kind": "host-plugin", "note": "任务完成通知监听（agent/status → JSONL + notify-send）" },
       { "from": "host/media.ts", "to": "$DSH_HOME/profiles/web/plugins/media.ts", "kind": "host-plugin", "note": "/mydsh-media 本地媒体路由（视频播放用，带 Range）" },
       { "from": "client/ui-notify/", "to": "$DSH_HOME/profiles/node_modules/@mydsh/ui-notify/", "kind": "client-plugin", "note": "浏览器完成通知（Notification API + 提示音）" },

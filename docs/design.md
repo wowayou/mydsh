@@ -48,6 +48,7 @@ DSH 的每个能力都是一条 `cordis.yml` 里的插件行。我的系统 = �
 | 自定义提示音 | 客户端 | `@mydsh/ui-notify` | `settings.general.item` 设置卡片：上传音频文件 → localStorage base64，回退 Web Audio beep |
 | 主动通知工具 | 预设 | `preset/plugins/notify-tool.ts` | 模型可调 `notify_user(title, body)` 工具 |
 | 视觉理解（modlens） | 预设 | `preset/plugins/vision-tool.ts` | 工具 `vision_describe(path, prompt)`：attachment 提交图片 → `llm.stream`（qwen-vl-max） |
+| 视觉理解（技能层） | 技能 | `skills/vision/{SKILL.md,scripts/dsh-vision.mjs}` | `skill` 工具按需加载指令 → bash 跑零依赖 CLI，直连 provider HTTPS；支持多图/PDF 页/视频帧/上传前缩放/结果缓存 |
 | 多会话新标签页 | 客户端 | `@mydsh/ui-session-tabs` | `conversation.session.header.actions` 会话头「⧉」按钮 + `conversation.input.dock` URL 打开器 |
 | 视频支持 | 客户端 | `@mydsh/ui-video` | `conversation.input.dock` null 组件 + MutationObserver，消息中媒体链接渲染 `<video>` |
 | 非 DeepSeek 模型 full-access 报错 | 部署层补丁 | `patches/sandbox-same-mode-escalation.patch` | 同模式升级视为 no-op 直接放行 |
@@ -70,6 +71,39 @@ vision_describe(path, prompt)
   → ctx.llm.stream({provider, model, messages:[{role:'user', content:[text, image-block]}]})
   → 汇总结论文本返回给文本模型
 ```
+
+### 3.2b 视觉理解（技能层，2026-08-21）
+
+与 3.2 是**两条互补路径**，不是替代关系：
+
+```
+模型判断需要看图
+  → skill('vision') 载入 SKILL.md（渐进披露：目录里只有 name+description）
+  → bash: node <skill-dir>/scripts/dsh-vision.mjs <文件...> [--preset ocr|ui|...]
+      ├─ 路径限制: cwd(+MYDSH_VISION_EXTRA_ROOTS) / MYDSH_VISION_ROOTS 固定
+      ├─ 素材: 图片直用 | PDF→pdftoppm 渲染页 | 视频→ffmpeg 抽帧 | 长边缩到 --max-side
+      ├─ 路由: $DSH_HOME/settings.yaml 的 llm-pi-ai.providers（三方言：completions/responses/anthropic）
+      │        密钥: provider.apiKey → env[apiKeyEnv] → $DSH_HOME/.credentials.yaml
+      ├─ 缓存: sha256(方言+baseURL+model+prompt+图字节) → $DSH_HOME/mydsh/vision-cache
+      └─ 审计: cli-sent | cli-cache-hit | cli-denied | cli-failed → $DSH_HOME/mydsh/vision.jsonl
+  → stdout 纯文本回到模型上下文（元信息走 stderr）
+```
+
+设计取舍：
+
+- **不走 harness `llm` 服务**，直连 provider HTTPS。原因是 pi-ai 会按
+  `model.input.includes('image')` 拦截（`UNSUPPORTED_CONTENT`），而本能力的目标恰恰
+  是「主模型不支持图片时也能看图」；直连还顺带免掉 attachment 服务、免重启、
+  不 import 任何 `@deepseek-ai/*` 内部包。
+- **技能层 vs 预设层**：预设工具是常驻 schema（每轮都占 tool 定义），技能是按需
+  加载（目录里只有一行描述）；预设工具一次调用就能把结果嵌进对话，技能能做
+  多图/PDF/视频/缩放/缓存这些"重"能力。两者共用同一份审计文件。
+- **密钥不进模型上下文**：CLI 自己从 `$DSH_HOME/.credentials.yaml` 读，不要求模型
+  在 shell 里 export；密钥只进请求头，不打印、不写审计。
+- **路径限制是护栏 + 取证，不是外渗边界**：DSH 的 `SandboxMode` 只管文件效果，
+  网络与进程策略不在它的词汇表里 —— 一个被注入的模型本来就能写自己的脚本发请求。
+  真要硬边界，用 `MYDSH_VISION_ROOTS` 固定根（命令行无法扩大），并盯
+  `vision.jsonl` 里的 `cli-denied`。
 
 ### 3.3 多标签页会话
 ```

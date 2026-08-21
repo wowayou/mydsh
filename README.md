@@ -15,6 +15,7 @@
 | Task completion notification | Host plugin listens to `agent/status` (running→idle): JSONL log + `notify-send`; browser plugin: Notification API + sound (alerts when tab is in background) | Host + Browser |
 | Proactive notification | Model can call `notify_user(title, body)` tool | Preset |
 | Vision for text models | `vision_describe(path, prompt)` — modlens visual assistant: reuses image attachment channel, calls qwen-vl-max to generate descriptions for text models | Preset |
+| Vision as a skill | `skills/vision` — `SKILL.md` + a zero-dependency CLI (`node scripts/dsh-vision.mjs <files…>`): images, **PDF pages**, **video frames**, multi-image compare, OCR/UI-review presets, pre-upload downscale and a result cache. Talks to the provider directly, so it works even when the main model has no image input; hot-discovered, no restart | Skill |
 | Multi-session tabs | "⧉" button in session header actions: copies `?session=<id>` deep link and opens in new tab; each tab selects its own session independently. Plus a "New" button at the sidebar foot that pops a workspace picker, then opens a fresh session in that workspace in a new tab (falls back to a blank tab when no workspace exists) | Browser |
 | Video support | Media links with absolute paths (`[demo.mp4](/abs/path/demo.mp4)`) auto-render as draggable `<video>/<audio>` (host `/mydsh-media` route with Range support) | Host + Browser |
 | Non-DeepSeek model full-access error fix | Minimal patch to harness: same-mode "escalation" treated as no-op pass-through (`patches/`, with unit tests) | Patch |
@@ -96,6 +97,7 @@ Per-provider UA takes priority over the global `DSH_APP_PRODUCT` env var.
 - Node.js with tsx support
 - `$DSH_HOME` set (defaults to `~/.dsh`)
 - Optional: `notify-send` for desktop notifications (Linux/Wayland)
+- Optional (vision skill): `pdftoppm` (poppler-utils) for PDF pages, `ffmpeg`/`ffprobe` for video frames and pre-upload downscale
 
 ### Security model
 
@@ -103,6 +105,7 @@ Per-provider UA takes priority over the global `DSH_APP_PRODUCT` env var.
 | --- | --- |
 | `/mydsh-media` route | Loopback-only (the harness rejects `--host 0.0.0.0`). Serves **only** files with a media extension (`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`); anything else is 404. Requests carrying an `Origin`/`Referer` must come from the dsh UI itself (same host + exact listening port). Requests **without** Origin (the `<video>` element's own load, local `curl`) are allowed — on loopback that equals the local user reading a media file. |
 | `vision_describe` | Image bytes leave the machine to the configured vision provider (that is the feature). Readable paths are contained to the **session workspace** plus optional `MYDSH_VISION_EXTRA_ROOTS` (`:`-separated absolute paths, `~` ok); symlinks are resolved (realpath) before the check. Every attempt, allowed or denied, is audited to `$DSH_HOME/mydsh/vision.jsonl` — a denied read is a prompt-injection trace. |
+| `skills/vision` CLI | Same containment shape: roots are the **cwd** plus `MYDSH_VISION_EXTRA_ROOTS`, or a pinned `MYDSH_VISION_ROOTS` that command-line args cannot widen; realpath before the root check, and the extension check runs on the real path. The API key is read from `$DSH_HOME/.credentials.yaml` by the CLI itself — it never enters the model's shell, the transcript, or the audit log. Audited to the same `vision.jsonl` with `via: skill-cli`. **Honest caveat**: DSH's `SandboxMode` governs file effects only, not network/process, so this is a guardrail plus forensic trail, not an exfiltration boundary. |
 | `restart.sh` | `--expose-internals` stays on by default (config HMR depends on it); `MYDSH_NO_HMR=1` runs hardened (config edits then need a manual restart). `PORT` must be an integer 0-65535. |
 | `install.sh` | Deploy commands run as arg arrays (no `eval`) — hostile `$DSH_HOME`/`$DSH_PROFILE` values can no longer inject commands. |
 
@@ -116,6 +119,7 @@ mydsh/
 ├── preset/                        # mydsh agent preset (standard mode, personalized)
 │   ├── agent.cordis.yml           #   Composition (persona + two private tool rows)
 │   └── plugins/{notify-tool,vision-tool}.ts
+├── skills/vision/                 # Skill: SKILL.md + scripts/dsh-vision.mjs (zero-dep CLI)
 ├── host/{notify,media}.ts         # Host plugins (notification listener / local media route)
 ├── client/                        # Browser plugins (handwritten __ModuleLoader__ bundles, zero build deps)
 │   ├── ui-notify/  ui-session-tabs/  ui-video/
@@ -124,6 +128,7 @@ mydsh/
 ├── install.sh                     # Idempotent deploy to $DSH_HOME
 ├── up.sh                          # One-command deploy + restart + media verification
 ├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
+├── tests/vision-cli.mjs           # Vision skill CLI tests (plain `node`, no harness deps)
 └── manifest.json                  # File → deploy target manifest
 ```
 
@@ -151,6 +156,7 @@ mydsh/
 | 任务完成没提醒 | 主机层监听 `agent/status`（running→idle）：写 JSONL 日志 + `notify-send`；浏览器插件：Notification API + 提示音（页面后台时才提醒） | 主机 + 浏览器 |
 | 主动通知 | 模型可调 `notify_user(title, body)` 工具 | 预设 |
 | 文本模型看不懂图片 | `vision_describe(path, prompt)` —— modlens 视觉助手：复用图片提交通道，调 qwen-vl-max 生成描述回给文本模型 | 预设 |
+| 视觉能力（技能形态） | `skills/vision` —— `SKILL.md` + 零依赖 CLI（`node scripts/dsh-vision.mjs <文件...>`）：图片、**PDF 按页**、**视频抽帧**、多图对比，内置 OCR/UI 评审等提问预设，上传前缩放 + 结果缓存。直连 provider，所以主模型不支持图片输入时也能看图；热发现，无需重启 | 技能 |
 | 多 Session 新窗口 | 会话头操作行「⧉」按钮：复制 `?session=<id>` 深链并在新标签页打开；各标签页各选各的会话互不干扰。侧栏底部「新建会话」selector pill（设置选中弹窗形态）：点击弹出工作区选择菜单（选中项带 ✓），选定后在该工作区下新建会话并新标签页打开（无工作区时退化为打开空标签页） | 浏览器 |
 | 视频支持 | 消息里以绝对路径写的媒体链接（`[demo.mp4](/abs/path/demo.mp4)`）自动渲染成可拖动的 `<video>/<audio>`（主机 `/mydsh-media` 路由带 Range 支持） | 主机 + 浏览器 |
 | 非 DeepSeek 模型 full-access 报错 | 对 harness 的最小补丁：同模式「升级」视为 no-op 直接放行（`patches/`，附单测与重放脚本） | 补丁 |
@@ -164,6 +170,7 @@ mydsh/
 ├── preset/                        # mydsh agent 预设（标准模式私人定制版）
 │   ├── agent.cordis.yml           #   组合（persona + 两个私有工具行）
 │   └── plugins/{notify-tool,vision-tool}.ts
+├── skills/vision/                 # 技能：SKILL.md + scripts/dsh-vision.mjs（零依赖 CLI）
 ├── host/{notify,media}.ts         # 主机层插件（通知监听 / 本地媒体路由）
 ├── client/                        # 浏览器插件（手写 __ModuleLoader__ bundle，零构建依赖）
 │   ├── ui-notify/  ui-session-tabs/  ui-video/
@@ -171,6 +178,7 @@ mydsh/
 ├── install.sh                     # 幂等部署到 $DSH_HOME
 ├── up.sh                          # 一键部署 + 重启 + media 边界验证
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
+├── tests/vision-cli.mjs           # 视觉技能 CLI 测试（纯 node，不依赖 harness）
 └── manifest.json                  # 文件 → 部署目标清单
 ```
 
@@ -210,6 +218,9 @@ DSH_HOME=/tmp/mydsh-smoke-home NODE_PATH=$HOME/.dsh/profiles/node_modules \
 # 预设行解析校验（含部署位置上的插件依赖解析 + node_modules 符号链接断言）
 node /home/forbackup/Dev/mydsh/tests/check-preset.mjs
 
+# 视觉技能 CLI 测试（纯 node 即可，CLI 零依赖；内含本地假 provider）
+node /home/forbackup/Dev/mydsh/tests/vision-cli.mjs
+
 # sandbox 补丁单测
 cd /home/forbackup/deepseek-harness
 pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
@@ -222,6 +233,16 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 - **多任务识别**：通知带会话标题（标题→目录名→短 id），后台标签页会在标签栏闪烁 `[✓] 任务名`；
   点击通知可定位并打开该会话；同一任务完成只会有一个标签页发声（跨标签去重）。
 - **视觉**：直接对模型说「看一下这张图」并给出图片路径；或让模型用 `vision_describe`。
+- **视觉（技能）**：PDF / 视频 / 多图对比 / OCR 这类"重"活让模型走 `vision` 技能
+  （模型自己调 `skill`，你也可以直接输入 `/vision`）。也能手动跑：
+  ```bash
+  node ~/.dsh/skills/vision/scripts/dsh-vision.mjs shot.png --preset ui
+  node ~/.dsh/skills/vision/scripts/dsh-vision.mjs scan.pdf --pages 1-3 --preset ocr
+  node ~/.dsh/skills/vision/scripts/dsh-vision.mjs demo.mp4 --frames 4 -p "用户点了哪些按钮？"
+  node ~/.dsh/skills/vision/scripts/dsh-vision.mjs a.png --dry-run   # 只看会发什么，不花钱
+  ```
+  预设：`describe`（默认）`ocr` `ui` `chart` `code` `diff`。只读 cwd（+`MYDSH_VISION_EXTRA_ROOTS`）
+  内的文件；结果按「模型+问题+图字节」缓存，重复问不重复付费。
 - **批注**：悬停一条回复 → 点击「✎ 批注」；先选中回复里的文字会被自动摘录进批注。
 - **多标签**：会话头「⧉」一键新标签页打开本会话；手动访问 `http://127.0.0.1:3081/?session=<id>` 也可直达。侧栏底部「新建」按钮弹出工作区选择框，选定后在该工作区新建会话并新标签页打开。
 - **视频**：让模型在回复里写 `[demo.mp4](/绝对/路径/demo.mp4)` 这种链接，页面自动渲染播放器。
@@ -232,6 +253,7 @@ pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 | --- | --- |
 | `/mydsh-media` 路由 | 仅绑定 127.0.0.1（harness 拒绝 `--host 0.0.0.0`）。**只服务媒体扩展名**（`.mp4/.webm/.mov/.m4v/.mkv/.ogv/.mp3/.wav/.ogg/.flac/.m4a`），其余一律 404。携带 `Origin`/`Referer` 的请求必须来自 dsh UI 自身（同源 + 精确监听端口）；无 Origin 的请求（`<video>` 元素自身的加载、本地 curl）放行——loopback 下等价于本机用户读媒体文件。 |
 | `vision_describe` | 图片字节会发往外部视觉 provider（功能本身）。可读路径限制在**会话工作区** + 可选 `MYDSH_VISION_EXTRA_ROOTS`（`:` 分隔绝对路径，支持 `~`）；先 realpath 再校验，防符号链接逃逸。每次调用（含被拒）审计到 `$DSH_HOME/mydsh/vision.jsonl`——被拒的读取即提示注入痕迹。 |
+| `skills/vision` CLI | 同构的路径限制：默认根 = **cwd** + `MYDSH_VISION_EXTRA_ROOTS`；`MYDSH_VISION_ROOTS` 一旦设置即权威，命令行无法扩大（硬边界开关）。先 realpath 再比对根，扩展名判定也落在真实路径上。密钥由 CLI 自己从 `$DSH_HOME/.credentials.yaml` 读——不进模型的 shell、不进对话、不进审计。审计写同一份 `vision.jsonl`（带 `via: skill-cli`）。**诚实说明**：DSH 的 `SandboxMode` 只管文件效果，不管网络与进程，所以这层是护栏 + 取证，不是外渗边界。 |
 | `restart.sh` | `--expose-internals` 默认保留（配置 HMR 依赖它）；`MYDSH_NO_HMR=1` 可加固运行（配置改动需手动重启）。`PORT` 强制 0-65535 整数。 |
 | `install.sh` | 部署命令以参数数组直接执行（不经 `eval`）——恶意 `$DSH_HOME`/`$DSH_PROFILE` 值无法再注入命令。 |
 

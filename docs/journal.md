@@ -682,3 +682,69 @@ LanguageRow（设置 General 的语言行）标准模式：
 
 ### 回归
 stress 116/116、smoke 35/35、check-preset 41/41 全绿；host 插件编译验证通过。
+
+## 2026-08-21 技能层视觉能力（skills/vision）
+
+### 诉求
+"通过 skill 给 dsh 加视觉能力" —— 已有的 `vision_describe` 是预设工具（常驻 schema、
+只吃单张图片），这次要的是 DSH 的**技能**机制（`SKILL.md` 渐进披露 + bash 脚本），
+并顺带把能力补齐到 PDF / 视频 / 多图。
+
+### 做了什么
+- `skills/vision/SKILL.md`：frontmatter（`name: vision` + description + whenToUse +
+  metadata），正文先教模型**优先用 `read_image`**，仅在它报 `UNSUPPORTED_CONTENT` /
+  不存在 / 素材是 PDF·视频时才用本技能；写清预设、代价（真花钱 + 缓存）、
+  可读范围（被拒时**不要绕**，直接告诉用户）、失败模式表、以及"模型转述可能出错"的提醒。
+- `skills/vision/scripts/dsh-vision.mjs`：约 660 行零依赖 ESM CLI。
+  - 路由：读 `$DSH_HOME/settings.yaml` 的 `llm-pi-ai.providers`，自动挑第一个 id 像
+    视觉模型的（`vl|vision|omni|multimodal`），或 `--model provider/model`；
+    支持 `openai-completions` / `openai-responses` / `anthropic-messages` 三种方言；
+    `MYDSH_VISION_BASE_URL` 是完全绕过 settings 的逃生门（CI / 无 dsh 环境）。
+  - 密钥：`provider.apiKey` → `env[apiKeyEnv]` → `$DSH_HOME/.credentials.yaml`。
+    只进请求头 —— **不打印、不写审计、不进模型上下文**。
+  - 素材：图片直用；PDF 走 `pdftoppm -png -r 150 -f/-l`（`--pages 1-3,7`）；
+    视频走 `ffmpeg -ss <t> -i`（`--frames n` 均匀取点避开首尾，或 `--at 3,7.5`）；
+    上传前按 `--max-side`（默认 1280）用 ffmpeg 缩放。外部二进制缺失时明确报错/降级，
+    不擅自安装。
+  - 上限：一次最多 8 张图、base64 总量 15MB；单文件 image 20MB / pdf 200MB / video 4GB。
+  - 缓存：`sha256(方言+baseURL+model+prompt+各图字节)` → `$DSH_HOME/mydsh/vision-cache`
+    （按 mtime 保留 200 条），重复问不重复付费；`--no-cache` 跳过。
+  - 健壮性：`AbortController` 超时 + 对 网络错误/408/429/5xx 指数退避重试（默认 2 次）；
+    `--dry-run` 打印"打给谁、发几张、多大"且不要求密钥；`--json` 给结构化输出；
+    正文走 stdout、元信息走 stderr（不污染模型读到的结果）。
+  - 内置 miniYaml（`$DSH_HOME/profiles/node_modules/yaml` 可用时优先用真 yaml），
+    所以纯 `node` 就能跑，不需要 harness 依赖树。
+- `install.sh`：新增 `1b) 技能 → $DSH_HOME/skills`。**逐个技能** rsync `--delete`，
+  绝不对整个 `skills/` 用 `--delete` —— 那会连带删掉用户自己的技能。
+- `manifest.json`：新增 `skills/ → $DSH_HOME/skills/`（kind: skill）。
+- `tests/vision-cli.mjs`：63 项，纯 `node` 可跑（CLI 零依赖）。
+
+### 安全边界
+- 路径限制与 `vision_describe` 同构：resolve → stat（必须普通文件）→ 大小预检 →
+  **realpath 后**再比对根，且扩展名判定落在真实路径上（防 `x.png` 符号链接到别处）。
+  默认根 = cwd + `MYDSH_VISION_EXTRA_ROOTS`；`MYDSH_VISION_ROOTS` 一旦设置即权威，
+  命令行无法扩大（给"想要硬边界"的部署用）。
+- 审计：`cli-sent` / `cli-cache-hit` / `cli-denied` / `cli-failed` 写同一份
+  `$DSH_HOME/mydsh/vision.jsonl`（带 `via: skill-cli`）；测试断言审计里**不含密钥、
+  不含 base64 图片字节**。
+- 诚实记录：这层是**护栏 + 取证**，不是外渗边界。DSH 的 `SandboxMode` 只管文件效果，
+  网络与进程策略不在它的词汇表里，被注入的模型本可以自己写脚本发请求。要硬边界
+  就固定 `MYDSH_VISION_ROOTS` 并盯 `cli-denied`。
+
+### 踩到的坑
+1. **测试死锁**：假 provider（`node:http`）跑在测试进程内，却用 `spawnSync` 调 CLI ——
+   父进程事件循环被阻塞，HTTP 请求永远得不到响应，测试挂死 120s 无输出。
+   改成异步 `spawn` + Promise 后即通。
+2. **`--dry-run` 不该要密钥**：初版把密钥校验放在 dry-run 之前，导致"只想看计划"的
+   场景也被拦。已把 dry-run 提前到密钥校验之前。
+3. 测试里把 `/nope-rel` 当"相对路径会被忽略"的样例写错了（它是绝对路径），
+   期望值随之修正为 `relative-ignored`。
+
+### 验证
+- `node tests/vision-cli.mjs` 63/63 全绿（含三方言请求体、重试、缓存、审计、退出码）。
+- 真实端到端（`aliyun-bailian-vision/qwen-vl-max`）三条路径都跑通：
+  PNG OCR 读回 "HELLO MYDISH / vision skill test 42"（注：模型把 MYDSH 读成 MYDISH，
+  正好印证 SKILL.md 里"转述可能有错"的提醒）；手搓 3 页 PDF 的 `--pages 1-3 --preset ocr`
+  逐页正确；`testsrc` 视频 `--frames 2` 抽帧成功。
+- `SKILL.md` frontmatter 用真 `yaml` + harness 的 kebab-case 规则校验通过。
+- 回归：smoke 全绿、check-preset 41/41 全绿；未重启用户的 dsh（技能是热发现的）。

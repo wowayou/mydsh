@@ -18,6 +18,8 @@ PROFILE="${DSH_PROFILE:-web}"
 PROFILE_DIR="$DSH_HOME/profiles/$PROFILE"
 PATCH_FILE="$PROFILE_DIR/cordis.patch.yml"
 PRESET_DIR="$DSH_HOME/.agent-presets/mydsh"
+# 技能根目录：dsh 用 chokidar 监听，新增/改动技能无需重启进程。
+SKILLS_DIR="$DSH_HOME/skills"
 # 预设本地插件（./plugins/*.ts）的依赖解析根：让 .agent-presets 能向上找到
 # profile 的 node_modules。预设目录在用户 home 下，Node 从那里向上找
 # node_modules 永远到不了 harness 的依赖，./plugins/*.ts 里的
@@ -59,6 +61,19 @@ echo
 say "1) 预设 → $PRESET_DIR"
 run mkdir -p "$PRESET_DIR"
 run rsync -a --delete "$PROJECT/preset/" "$PRESET_DIR/"
+
+# 1b) 技能包（权威源 = skills/）
+#     $DSH_HOME/skills 是共享目录（用户自己的技能也在这里），所以**逐个技能**同步，
+#     绝不对整个 skills/ 用 --delete —— 那会连带删掉别人的技能。
+say "1b) 技能 → $SKILLS_DIR"
+run mkdir -p "$SKILLS_DIR"
+for skill in "$PROJECT"/skills/*/; do
+  [ -d "$skill" ] || continue
+  name="$(basename "$skill")"
+  run rsync -a --delete "$skill" "$SKILLS_DIR/$name/"
+done
+# 技能里的脚本要可执行（rsync -a 已保留权限，这里兜底）。
+run chmod -R u+rwX "$SKILLS_DIR"
 
 # 2) 主机层插件（权威源 = host/）
 say "2) 主机插件 → $HOST_PLUGIN_DIR"
@@ -158,6 +173,7 @@ fi
 echo
 echo "== 完成 =="
 echo "· 新会话在侧栏选择预设「mydsh 模式」即可使用 notify_user / vision_describe。"
+echo "· 技能：\$DSH_HOME/skills/vision（热发现，无需重启）；模型用 skill 工具或你输入 /vision 触发。"
 echo "· 浏览器插件：刷新页面（若跑着 dev:web 则自动热更新）。"
 echo "· 补丁（若本轮应用）需重启 dsh 进程生效。"
 echo "· 完成提醒日志: \$DSH_HOME/mydsh/notify.jsonl"
