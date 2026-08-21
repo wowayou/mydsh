@@ -79,7 +79,8 @@ vision_describe(path, prompt)
 ```
 模型判断需要看图
   → skill('vision') 载入 SKILL.md（渐进披露：目录里只有 name+description）
-  → bash: node <skill-dir>/scripts/dsh-vision.mjs <文件...> [--preset ocr|ui|...]
+  → bash: node $DSH_HOME/skills/vision/scripts/dsh-vision.mjs <文件...> [--preset ocr|ui|...]
+      （SKILL.md 里写的是绝对路径：install.sh 部署时把 ~/.dsh/skills/ 换成真实 $DSH_HOME）
       ├─ 路径限制: cwd(+MYDSH_VISION_EXTRA_ROOTS) / MYDSH_VISION_ROOTS 固定
       ├─ 素材: 图片直用 | PDF→pdftoppm 渲染页 | 视频→ffmpeg 抽帧 | 长边缩到 --max-side
       ├─ 路由: $DSH_HOME/settings.yaml 的 llm-pi-ai.providers（三方言：completions/responses/anthropic）
@@ -97,7 +98,14 @@ vision_describe(path, prompt)
   不 import 任何 `@deepseek-ai/*` 内部包。
 - **技能层 vs 预设层**：预设工具是常驻 schema（每轮都占 tool 定义），技能是按需
   加载（目录里只有一行描述）；预设工具一次调用就能把结果嵌进对话，技能能做
-  多图/PDF/视频/缩放/缓存这些"重"能力。两者共用同一份审计文件。
+  多图/多方言/缩放这些"重"能力。**两平面共用 `lib/vision-core.mjs`**（2026-08-21）：
+  路径限制、PDF 渲染页 / 视频抽帧、结果缓存、审计只有一份实现 —— 安全代码重复
+  就是负债（两份都得维护、两份都可能改漏）。抽出来后 `vision_describe` 也直接
+  拿到了 PDF/视频/缓存。差异只留在各自的表达层：CLI 的报错是中文、工具的报错是
+  英文（给模型看），根的基准一个是 cwd、一个是会话工作区。
+  仓库里 `preset/plugins/lib/` 与 `skills/vision/scripts/lib/` 下是指向项目根
+  `lib/` 的符号链接，`install.sh` 用 `rsync --copy-unsafe-links` 落成真实文件，
+  部署树互不依赖（`tests/check-preset.mjs` 断言这一不变量）。
 - **密钥不进模型上下文**：CLI 自己从 `$DSH_HOME/.credentials.yaml` 读，不要求模型
   在 shell 里 export；密钥只进请求头，不打印、不写审计。
 - **路径限制是护栏 + 取证，不是外渗边界**：DSH 的 `SandboxMode` 只管文件效果，
@@ -221,6 +229,53 @@ per-provider headers.user-agent  >  DSH_APP_PRODUCT 环境变量  >  默认 deep
 
 `restart.sh` 支持 `DSH_UA_ALIAS` 快捷别名（cursor/claude-code/codex/opencode）。
 
+## 6b. 浏览器插件的 npm 形态（2026-08-21）
+
+项目定位收窄之后（官方已覆盖的部分冻结），真正值得对外的就是四个浏览器插件 ——
+它们属于官方设计取向决定不会做的那类。要让社区「一条命令装上」，需要的不只是
+`npm publish`：
+
+| 环节 | 做法 | 为什么 |
+| --- | --- | --- |
+| scope + 可见性 | `@mydsh/*` + `publishConfig.access: public` | scoped 包默认私有，漏了就发不出去 |
+| 一条命令生效 | 每包声明 `dsh.bundle.patch: './cordis.patch.yml'`，patch 里 `- insert:` 自己的插件行 | `dsh plugin --profile web add <包>` 是 pnpm 转发器 + 状态对账：装完发现包声明了 `dsh.bundle` 就把它追加到 profile 的 `dsh.profile.bundles`，然后应用这一层 —— 用户不用手改 YAML。**不声明**的话 dsh 会打印 "declares no dsh.bundle — installed as a plain dependency" 并要求手工加行 |
+| 包内容 | `files: [lib, cordis.patch.yml, README.md, LICENSE]` | patch 文件忘了进 `files` → 装上去就是「bundle 声明了 patch 但文件不存在」，`profile.ts` 会 fail loud |
+| 预发布 | `@mydsh/ui-annotate` = `0.1.0-preview.1` + `publishConfig.tag: preview` | 它只存 localStorage、模型看不见（见 `POSTMORTEM.md`「不成熟的功能不要放」）；不能占 `latest` |
+| 回归 | `tests/npm-packages.mjs`（纯 node） | 以上每一条漏了都不会在本机报错，而是社区装的时候才炸 |
+
+**两条安装路径互斥**：`install.sh` 把插件行直接写进 profile 自己的
+`cordis.patch.yml`；npm 装的话行来自包的 bundle 层。两条都走 → 组合后的 tree 里
+同一个 id 出现两行（`dsh --profile web --dump-config` 实测），插件挂载两次
+（通知会响两遍）。README 两语言都写明「只选一条」。
+
+**ui-video 只有浏览器半边**：播放地址 `/mydsh-media/<路径>` 由主机层 `host/media.ts`
+提供（媒体扩展名白名单 + Origin 校验 + Range）。没把它一起塞进 npm 包，是因为那份
+是安全相关代码，复制成两份就是 `vision-core` 之前那种负债；要做就单独发
+`@mydsh/host-media` 让 ui-video 依赖它 —— 留待需要时再做。README 里写明前提。
+
+### 6b.1 「不伤害安装者」清单（2026-08-21）
+
+发布之前把四个 bundle 按「这段代码跑在别人的页面上」重审了一遍。发现的问题都不是功能
+bug，而是**只在别人机器上才显形**的副作用：
+
+| 向量 | 之前 | 现在 |
+| --- | --- | --- |
+| 重复挂载 | 仓库 patch 行 + npm bundle 层都装 → 同 id 两行 → 监听器两份、一次完成响两声 | 每个 bundle 用 `window.__mydsh*Mounts` 计数认领唯一挂载权；重复那份不注册，只打一条写清「去掉哪条安装路径 + 用 `--dump-config` 自查」的告警。计数跟 `ctx.effect` 生命周期回落，HMR 重挂不误报 |
+| localStorage 配额 | 自定义提示音 `readAsDataURL` 无上限写进 localStorage；批注库无总量上限 | 提示音 512 KiB（在读文件**之前**按 `file.size` 拒），批注库总量 256 KiB。配额是**整个 origin 共享**的 —— 宿主 UI 自己的设置/草稿在同一份里，插件把它吃满就是宿主写入开始失败 |
+| 静默失败 | `saveCustomSound(...).catch(function() {})`、`saveAll` 吞 quota 异常 | reject 带 `code`（`too-big`/`quota`/`read-failed`），设置行里直接显示原因；批注写不进去就保留输入框内容并显示「库已满」。删除写入永远放行（否则升级前存下的超限旧库会把人锁在「删不掉也存不下」） |
+| 没有关声音的开关 | 只能上传一个静音音频，或卸插件 | 设置行加「静音」：只弹通知不发声，「试听」不受影响 |
+| ui-video 只装浏览器半边 | `replaceChild` 把原链接**删掉**换成播放器 → 没有主机层路由时是个死播放器 + 一串 404，文件也点不开了 | 原 `<a>` 留在播放器的兜底区里，`error` 时播放器自隐、链接显示回来并附一句原因 |
+| ui-video 改写范围 | `isExternal()` 黑名单式判断，协议相对地址（`//host/x.mp4`）会被当本地路径改写 | 白名单式 `isLocalAbsolute()`：只认「单个前导斜杠的绝对路径」，正是 `host/media.ts` 能接受的形状 |
+| 宿主换槽位 | `if (slots === undefined) return`（静默） | 打一条告警说明「什么都没注册 + 本包验证过的 dsh 版本」 |
+| 全局命名空间 | `window.__mydshVideoObserver` | 收进模块闭包 |
+| 包元信息 | `manifest.json` 作者 `forbackup`，包里 `wowayou` | 统一 `wowayou`（与 LICENSE、仓库 URL 一致）|
+| 无兼容声明 | 四个 README 都没写「对哪个 dsh 验证过 / 怎么卸载 / 谁维护」 | 各加一节 `Compatibility · uninstall`：dsh `0.1.0-rc.5`、按名字注册（宿主换名字最多一条告警）、不联网无遥测、个人维护无 SLA、`dsh plugin --profile web remove <包>` |
+
+回归：`tests/npm-packages.mjs` 加了一组「发布礼节」静态断言（挂载防护存在、上限常量存在、
+上限在读文件之前生效、没有空 `.catch`、README 有版本与卸载说明）；`tests/stress2.mjs`
+新增 R/S 两节用真 mock 驱动配额闸与静音，并把 ui-video 那节从「测试里抄一份正则」改成
+驱动 bundle 真正导出的 `isLocalAbsolute` / `playerFor`（含 error 退化路径）。
+
 ## 7. 目录布局
 
 ```
@@ -234,6 +289,8 @@ mydsh/
 │   ├── agent.cordis.yml
 │   ├── preset.yml
 │   └── plugins/              # 预设私有工具（相对路径引用）
+├── skills/vision/            # 技能：SKILL.md + scripts/dsh-vision.mjs（零依赖 CLI）
+├── lib/vision-core.mjs       # 视觉共用核心（两平面同源，部署时实体化）
 ├── host/notify.ts            # 主机层通知监听器
 ├── host/media.ts             # 主机层本地媒体路由
 ├── client/

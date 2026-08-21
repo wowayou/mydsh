@@ -748,3 +748,187 @@ stress 116/116、smoke 35/35、check-preset 41/41 全绿；host 插件编译验�
   逐页正确；`testsrc` 视频 `--frames 2` 抽帧成功。
 - `SKILL.md` frontmatter 用真 `yaml` + harness 的 kebab-case 规则校验通过。
 - 回归：smoke 全绿、check-preset 41/41 全绿；未重启用户的 dsh（技能是热发现的）。
+
+## 2026-08-21 视觉共用核心 lib/vision-core.mjs + SKILL.md 绝对路径
+
+> 动机：预设工具（`vision_describe`）和技能 CLI（`dsh-vision.mjs`）各自实现了一份
+> 路径限制。**这是安全代码，重复即负债** —— 两份都要维护、两份都可能改漏。抽成一份
+> 之后，`vision_describe` 顺带白拿 PDF/视频/结果缓存。
+
+### 做了什么
+- 新增 `lib/vision-core.mjs`（唯一权威源，零依赖，纯 node ESM）：
+  - 路径限制：`parseRoots` / `rootsFrom` / `kindOf` / `contain` / `denialDetail`
+    （resolve → stat 只收普通文件 → 按 kind 的大小预检 → realpath → 比对根 →
+    真实路径上判类型）。
+  - 素材准备：`parsePages` / `frameTimes` / `probeDuration` / `renderPdf`（pdftoppm）
+    / `grabFrames`（ffmpeg）/ `maybeDownscale` / `prepareImages` / `readImageBytes`。
+  - 结果缓存：`cacheKeyOf` / `cacheRead` / `cacheWrite`（`$DSH_HOME/mydsh/vision-cache`，
+    按 mtime 保留 200 条）。
+  - 审计：`audit(event, detail)` → `$DSH_HOME/mydsh/vision.jsonl`，`DSH_HOME` **惰性**
+    读取（测试要在 import 之后改 `process.env.DSH_HOME` 做隔离）。
+- `skills/vision/scripts/dsh-vision.mjs`：725 → 504 行。只留 CLI 独有的部分
+  （配置读取与选路、三种 API 方言、HTTP 重试、参数解析），并把 `contain` / `kindOf` /
+  `parsePages` / `rootsFrom` 透传导出，`tests/vision-cli.mjs` 无需改动。
+- `preset/plugins/vision-tool.ts`：删掉自带的 `containToRoots` / `extraRootsFromEnv` /
+  `MEDIA_BY_EXT` / `audit`，改用共用核心，同时获得：
+  - **PDF / 视频**：新增 `pages`、`frames` 两个可选参数（多图一起进 attachment 通道）；
+  - **结果缓存**：`cache` 配置（默认开），缓存查询在**信号量之前**（命中不占并发额度）；
+  - **`MYDSH_VISION_ROOTS` 语义对齐**：一旦设置即权威根，会话工作区不再自动加入
+    （此前只有 CLI 认这个变量，"硬边界开关"其实漏了预设平面）；
+  - 审计带 `via: preset-tool`，新增 `vision-describe-cache-hit` 事件。
+  - 报错文案保持英文（给模型看）；决策逻辑在核心，措辞留在各平面。
+- `skills/vision/SKILL.md`：7 处 `<skill-dir>` 占位符 → 绝对路径。仓库里写默认值
+  `~/.dsh/skills/...`（离线可读），`install.sh` 新增 `1c)` 步把它替换成本机真实
+  `$SKILLS_DIR`（`DSH_HOME` 非默认时也对）。**只改本项目自己的技能**，不碰
+  `$DSH_HOME/skills` 下用户的其它技能。
+- `install.sh`：预设与技能的 rsync 加 `--copy-unsafe-links`。
+
+### 部署形状（关键）
+仓库里 `preset/plugins/lib/vision-core.mjs` 与 `skills/vision/scripts/lib/vision-core.mjs`
+是指向项目根 `lib/` 的**符号链接**（一份源、两处消费）；`install.sh` 用
+`rsync --copy-unsafe-links` 把它们落成**真实文件**，部署树因此不依赖仓库还在原地。
+`tests/check-preset.mjs` 断言这一不变量（存在 + 是真实文件而非符号链接）。
+> 为什么不是 `cp -r`：`cp` 会**写穿**符号链接（改到项目源文件）。rsync 方案实测通过。
+
+### 踩到的坑
+1. **结果缓存把既有测试短路了**。`tests/stress.mjs` D 段与 `tests/stress2.mjs` K 段
+   反复用同一张图 + 同一 prompt 去走不同的假 LLM（截断/抛异常/finish error/空响应），
+   缓存一开，第二个用例起全部返回上一个用例的文本 —— stress 直接红了 2 项
+   （`超长返回截断` 拿到 length=1）。修法：这些用例显式 `cache: false`（它们测的是
+   并发与错误路径，不是缓存），缓存本身在 stress2 新增的 9) 里单独测（命中不调 llm、
+   同文本、不同 prompt 不复用、审计含 `via=preset-tool` 与 `cache-hit`）。
+2. 顺带在 stress2 补了 10)：非媒体类型报 `unsupported type`、`frames` 越界报错、
+   坏 PDF/非法页码报 `ERROR: cannot prepare …`（不崩溃）。
+
+### 验证
+- `node tests/vision-cli.mjs` 全绿（63 项，CLI 重构后一字未改测试）。
+- `node tests/check-preset.mjs` 全绿（含新增的共用核心真实文件断言）。
+- harness 内 tsx：`smoke.mjs` 全绿、`stress.mjs` 全绿（0 告警）、`stress2.mjs` 全绿
+  （K 段 21 项，含新增 8 项）。
+- 部署后真实抽查：`node ~/.dsh/skills/vision/scripts/dsh-vision.mjs live.png --dry-run`
+  正确解析到 `aliyun-bailian-vision/qwen-vl-max`；`/etc/passwd` 被拒
+  （`不在允许根内（/tmp/vision-live）`）。部署后的 SKILL.md 路径已是绝对路径。
+- 未重启用户的 dsh 进程：技能是热发现的；**预设插件改动要新建会话才生效**
+  （运行中的进程缓存模块解析）。
+
+## 2026-08-21 四个浏览器插件的 npm 打包（社区可安装形态）
+
+定位收窄的落地动作：把 `@mydsh/ui-notify`、`ui-session-tabs`、`ui-video`、`ui-annotate`
+做成社区能装的 npm 包 —— 这四个正是官方设计取向决定不会做的那类。
+
+### 做了什么
+- 四个 `client/*/package.json` 补齐发布元数据：`repository`（含 `directory`）、`homepage`、
+  `bugs`、`keywords`、`author`、`files`、`publishConfig.access: public`（scoped 包默认私有）。
+- 每包新增 `cordis.patch.yml` 并声明 `dsh.bundle.patch` —— 这才是「一条命令装上」的关键，
+  见下。`files` 里必须带上这个文件。
+- 每包新增 `README.md`（英文 + 中文，含安装、能力、前提、License）与 `LICENSE`（MIT，
+  与仓库根一致）。
+- `@mydsh/ui-annotate` 版本改为 `0.1.0-preview.1` + `publishConfig.tag: preview`，
+  README 顶部写明「批注只存 localStorage、模型看不见、主项目默认不部署」
+  （`POSTMORTEM.md`「不成熟的功能不要放」）—— 不能让它占 `latest`。
+- 新增 `tests/npm-packages.mjs`（纯 node）：断言 scope、access、`repository.directory`、
+  `exports` 目标文件存在、`dsh.bundle.patch` 存在且进了 `files`、patch 行 id 与
+  `install.sh` 的 marker 块一致、`manifest.json` 的 npm 登记与包版本/tag 对齐。
+- `manifest.json` 增 `npm` 段（四个包 + tag + 发布方式）；README 两语言各加一节
+  「npm 安装」；`docs/design.md` 增 `## 6b` 决策记录。
+
+### 关键机制：`dsh plugin add` 为什么能免手改 YAML
+读了 harness 的 `apps/cli/src/plugin.ts` + `packages/boot/app-boot/src/profile.ts`：
+`dsh plugin --profile web add <包>` 是 pnpm 转发器 + **按安装后状态对账** ——
+装完发现某个依赖声明了 `dsh.bundle.patch`，就把包名追加到 profile `package.json` 的
+`dsh.profile.bundles`，随后组合时应用该包的 patch 层。所以包自带一行
+`- insert: [- id: mydsh-ui-x, name: '@mydsh/ui-x']` 就够了。
+**不声明** `dsh.bundle` 的包会被 dsh 明确警告
+（`declares no dsh.bundle — installed as a plain dependency`）并需要用户手工加行。
+> 官方的 `packages/client/*` 都不声明 bundle：它们由 `dsh-web-app` 这个 bundle 包统一
+> 列出。第三方单包分发要自带 patch 层才是完整形态。
+
+### 踩到的坑
+1. **命令语法**：是 `dsh plugin --profile web add <包>`（`--profile` 属于 `plugin`
+   子命令），不是 `dsh plugin add`；`--dump-config` 是 `dsh --profile web --dump-config`。
+2. **pnpm 9 拒绝往 workspace root 加依赖**：profile 目录带 `pnpm-workspace.yaml`
+   （`packages: - .`），pnpm 9.12 报 `ERR_PNPM_ADDING_TO_ROOT`，要加 `-w`。
+   README 两语言都写了这一条。
+3. **两条安装路径互斥（实测）**：临时 `DSH_HOME` 里既装 bundle 又在 profile 自己的
+   `cordis.patch.yml` 写同样的行 → `--dump-config` 里 `id: mydsh-ui-video` 出现**两行**
+   （分别标注来源），插件会挂载两次（通知响两遍）。README 写明「只选一条」，
+   走 npm 的话先删掉 `# ==== mydsh begin/end ====` marker 块。
+4. **ui-video 只是半边**：播放地址由主机层 `host/media.ts` 提供，不在 npm 包里。
+   没顺手把它复制进包 —— 那是安全相关代码（扩展名白名单 + Origin + Range），
+   复制成两份就是 `vision-core` 之前的负债；要做应单独发 `@mydsh/host-media`。
+   README 明确写了这个前提。
+
+### 验证
+- `npm pack --dry-run` × 4：各 6 个文件（LICENSE / README.md / cordis.patch.yml /
+  lib/client.js / lib/index.js / package.json），无多余文件。
+- 临时 `DSH_HOME=/tmp/mydsh-plugin-test`（用完删除）里用本地路径装四个包：
+  profile `package.json` 的 `dsh.profile.bundles` 自动追加了四个包名，
+  `dsh --profile web --dump-config` 里四行插件行都在（各带 `# == @mydsh/...` 来源注释）。
+- `node tests/npm-packages.mjs` 全绿；`vision-cli.mjs` / `check-preset.mjs` 全绿；
+  harness 内 tsx 跑 `smoke.mjs` / `stress.mjs` / `stress2.mjs` 全绿（0 告警）。
+
+### 还没做（需要用户决定）
+- **实际发布**：需要 `npm login` + 创建 `@mydsh` 组织（scope 必须先存在），
+  四个名字目前在 registry 上都未被占用。发布是不可逆的对外动作，等你点头。
+- `@mydsh/ui-annotate` 要不要发：它是被主项目**主动撤下**的功能（POSTMORTEM 记录），
+  现在按 preview tag 打好包了，发不发是你的决定。
+
+---
+
+## 2026-08-21 发包前硬化：不能对别人的机器造成副作用
+
+### 做了什么
+四个 `@mydsh/*` bundle 已经打好包但还没发。发之前按「这段代码会跑在陌生人的
+dsh 页面上」把它们重审一遍，逐条堵掉**只在别人机器上才显形**的副作用（本机跑不出来，
+因为本机只走 `install.sh` 一条安装路径、localStorage 里也没有别人的数据）。
+
+| 插件 | 改动 |
+| --- | --- |
+| 全部四个 | `claimMount()` 重复挂载闸（`window.__mydsh*Mounts` 计数）；拿不到 `slots` 服务时打一条告警而不是静默 return；README 加 `Compatibility · uninstall` 节 |
+| ui-notify | 自定义提示音 512 KiB 上限（在 `readAsDataURL` **之前**按 `file.size` 拒）；失败原因显示在设置行里（`too-big` / `quota` / `read-failed`）；新增「静音」开关（只弹通知不发声，「试听」不受影响） |
+| ui-annotate | 批注库总量 256 KiB 上限；写不进去显示「库已满」并保留输入；**删除永远放行** |
+| ui-video | 原 `<a>` 不再被删掉，留在播放器的兜底区里，`error` 时播放器自隐 + 链接回显 + 一句原因；改写范围从黑名单 `isExternal()` 换成白名单 `isLocalAbsolute()`；`window.__mydshVideoObserver` 收进模块闭包 |
+| 元信息 | `manifest.json` 作者 `forbackup` → `wowayou`（与 LICENSE / 仓库 / 包一致）；根 README 增加「对安装者的承诺」段（不联网、无遥测、无 `postinstall`、不改宿主代码、只用有上限的 `mydsh.*` localStorage 键、缺槽位只告警） |
+
+### 关键机制
+- **localStorage 配额是整个 origin 共享的**。宿主 dsh UI 自己的设置就在同一份配额里，
+  插件无上限地写就等于让宿主的写入开始失败 —— 这是「装了我的插件之后 dsh 自己坏了」，
+  比插件自己坏严重得多。所以两个会写数据的插件都有硬上限，并且**失败要看得见**。
+- **`claimMount` 计数跟着 `ctx.effect` 生命周期回落**：disposer 里减 1。这样 HMR
+  卸载再挂载不会被误判成「装了两份」，而真的两条安装路径会稳定读到 2。
+- **删除写入绕过体积闸**（`saveAll(all, true)`）：不然升级前已经存下的超限旧库会把人
+  锁在「删不掉也存不下」的死角里 —— 闸门的目的是止增，不是禁止收缩。
+- **ui-video 的路径白名单与主机层同构**：`host/media.ts` 的 `decodePath` 只接受单段
+  `encodeURIComponent` 且解码后 `startsWith('/')`；客户端只改写「单个前导斜杠的绝对
+  路径」正好对上。`https:` / `//host/x.mp4` / `data:` / `blob:` / 相对路径一律不动，
+  所以消息内容无法把一个非本地文件变成媒体请求。
+
+### 踩到的坑
+1. **`playerFor` 会把 anchor 搬进兜底区**（detach），所以 `upgrade()` 里不能再
+   `parent.replaceChild(player, a)` —— 那时 `a` 已经不是 `parent` 的子节点，会抛异常。
+   改成先取 `parent` / `a.nextSibling`，构建完用 `insertBefore`。
+2. **`tests/stress.mjs` §E 会因为挂载闸「失败」**：它原本断言 apply 一次只产生 1 个
+   disposer、并把 `savedDisposers[0]()` 当 observer disposer 用。挂载闸加了第二个
+   effect，所以把这一节按新生命周期重写（首次 apply 2 个 disposer、计数 1；第二次
+   apply 不建 observer、计数 2；全部 dispose 后计数回 0；再 apply 建 observer #2）——
+   是改测试对齐新设计，不是削弱防护。
+3. **测试里抄一份被测逻辑等于没测**：stress2 §O 原来自己写了一份 href 判定正则。
+   这次改成从 bundle 的 `__test` 导出里拿真的 `isLocalAbsolute` / `playerFor`，
+   并把假 DOM 补齐到能跑 `addEventListener`，才测得到 error 退化路径。
+
+### 验证
+- `tests/stress2.mjs` ✔ 0 告警（含新增 R「提示音配额闸与静音」、S「批注库总量闸」，
+  §O 改为驱动真实导出）；`tests/stress.mjs` ✔ 0 告警（§E 新生命周期）；
+  `smoke.mjs` ✔；`check-preset.mjs` ✔；`vision-cli.mjs` ✔。
+- `tests/npm-packages.mjs` ✔ 新增「发布礼节」断言组：挂载防护存在、上限常量值正确、
+  上限在读文件之前生效、没有空 `.catch(function() {})`、README 声明了验证过的 dsh
+  版本与卸载命令。
+- `npm pack --dry-run` × 4：各 6 个文件，无多余文件。
+- `bash install.sh --no-patch` 重新部署：三个已部署 bundle 里都有 `claimMount`，
+  `~/.dsh/profiles/web/cordis.patch.yml` 里恰好三行客户端插件（无 ui-annotate 行）。
+
+### 还没做
+- **发布本身**：仍需 `npm login` + `npm org create mydsh`，然后逐包 `npm publish`
+  （`@mydsh/ui-annotate` 带 `--tag preview`）。不可逆的对外动作，等你点头。
+- `~/.dsh/profiles/node_modules/@mydsh/ui-annotate` 有个早先留下的空壳目录，
+  没有任何 patch 行引用它（处于惰性状态）。删它属于删数据，等授权。
