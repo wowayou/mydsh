@@ -24,14 +24,16 @@
     }
   },
   "npm": {
-    "note": "四个浏览器插件同时是可发布的 npm 包（scope @wowayou（用户名 scope，不需要建组织），publishConfig.access=public）；每包带 dsh.bundle.patch + 包内 cordis.patch.yml，`dsh plugin --profile web add <包>` 装完即生效。与仓库部署（install.sh 写 patch 行）二选一：两条都走会在组合 tree 里出现两行同 id 的插件行。",
+    "note": "四个浏览器插件是独立可安装包（scope @wowayou，用户名 scope，不需要建组织；保留 publishConfig.access=public 以备将来发 npm）。当前分发渠道是 GitHub 子目录，尚未发布到 npm。每包带 dsh.bundle.patch + 包内 cordis.patch.yml，装完即生效。与仓库部署（install.sh 写 patch 行）二选一：两条都走会在组合 tree 里出现两行同 id 的插件行。",
     "packages": [
       { "name": "@wowayou/ui-notify", "dir": "client/ui-notify", "version": "0.1.0", "tag": "latest" },
       { "name": "@wowayou/ui-session-tabs", "dir": "client/ui-session-tabs", "version": "0.1.0", "tag": "latest" },
       { "name": "@wowayou/ui-video", "dir": "client/ui-video", "version": "0.1.0", "tag": "latest", "note": "只有浏览器半边；播放地址由 host/media.ts 提供，需仓库部署" },
       { "name": "@wowayou/ui-annotate", "dir": "client/ui-annotate", "version": "0.1.0-preview.1", "tag": "preview", "note": "install.sh 不部署：批注只存 localStorage、模型看不见（docs/POSTMORTEM.md「不成熟的功能不要放」）" }
     ],
-    "publish": "npm login → 各包目录 npm publish；@wowayou/ui-annotate 用 --tag preview。用户名 scope 无需建组织（npm 也没有 org create 命令，建组织只能在 npmjs.com 网页上做）"
+    "channel": "github-subdir",
+    "install": "dsh plugin --profile web add -w \"github:wowayou/mydsh#path:/client/<名>\"（钉版本：#<sha>&path:/client/<名>）；卸载 dsh plugin --profile web remove <包名>",
+    "publish": "未发布到 npm（无账号）。将来要发：npm login → 各包目录 npm publish，@wowayou/ui-annotate 用 --tag preview；用户名 scope 无需建组织（npm 没有 org create 命令，建组织只能在 npmjs.com 网页上做）"
   },
   "docs": {
     "design": "docs/design.md",

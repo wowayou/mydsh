@@ -996,3 +996,62 @@ client module 的 graph row id（`graphRow(entryName, …)`），而
   账号名一致才发得出去，否则得换成实际用户名的 scope。
 - 旧的 `~/.dsh/profiles/node_modules/@mydsh/`（四个目录）现在没有任何 patch 行引用，
   处于惰性状态。删它属于删数据，等授权。
+
+## 2026-08-21 分发渠道换成 GitHub 子目录（npm 路线搁置）
+
+### 起因
+
+上一轮把包名退回 `@wowayou/*` 之后卡在最后一步：**没有 npm 账号**，而 npmjs.com 的
+注册/登录网页从这台机器（IP `161.153.88.185`）访问被反爬网关拦住，`npm login` 又要
+真 TTY（跑起来只会停在 `Username:` 然后超时）。同时五份 README 和主 README 里写的却是
+`dsh plugin --profile web add @wowayou/ui-notify` —— 一条对任何人都会 404 的命令。
+
+「等注册通了再说」是最坏的选项：文档已经在仓库里骗人了。所以先把渠道换成实测跑通的那条。
+
+### 验证过的替代渠道
+
+```
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"
+```
+
+`dsh plugin` 是 `$DSH_HOME/profiles/<profile>` 上的 pnpm 转发器，pnpm 自己认
+`#path:` 片段。五项逐个实测（临时 `DSH_HOME`，测完清掉）：
+
+1. 装得上：`+ @wowayou/ui-notify 0.1.0`，`node_modules/@wowayou/ui-notify` 就位；
+2. 内容对：只有 `files` 白名单里的 6 个文件（LICENSE / README.md /
+   cordis.patch.yml / lib/client.js / lib/index.js / package.json），不是整个仓库；
+3. 行进树：`dsh --profile web --dump-config` 里出现 `# == @wowayou/ui-notify` +
+   `- id: mydsh-ui-notify` / `name: '@wowayou/ui-notify'`（匹配数 1，没重复）；
+4. 钉版本：`#<full-sha>&path:/client/ui-notify` 装得上，依赖 spec 原样存进 package.json；
+5. 卸得掉：`dsh plugin --profile web remove @wowayou/ui-video` → 行没了、
+   `dsh.profile.bundles` 回到两条基线、`dependencies` 变 `undefined`。
+
+**包名不变**：GitHub 装出来的目录名、卸载命令用的名字都还是 `@wowayou/ui-*`，
+所以三处一致性约束（package name ≡ 插件行 name ≡ loader id）和 `install.sh` 的
+`CLIENT_ROOT` 都不用动。将来真发 npm 时，只是多一条渠道，包本身不改。
+
+### 改了什么
+
+- 四份客户端 README + 主 README（中英双语）：安装块改成 GitHub spec，补 commit 钉法、
+  `--dump-config` 自查、按包名卸载；`ui-annotate` 从「以 preview 标签发布」改成
+  「不在 npm 上，要就从仓库子目录装」；`ui-video` 的「不在本 npm 包内」去掉 npm；
+  三处「Installed twice (npm bundle layer …)」改成 `dsh plugin` bundle 层 + `install.sh` 行。
+- `docs/design.md` §6b 标题从「npm 形态」改成「分发形态」，表格加「分发渠道」「版本钉法」
+  两行并说明为什么不是 npm；`npm 副本` 之类的措辞跟着改。
+- `docs/POSTMORTEM.md` 新增核心原则 4「文档只写实测过的命令」——
+  这轮的教训不是「npm 没注册成」，是「渠道没就绪却先把安装命令写进了 README」。
+- `manifest.json`：`npm.note` 说明当前渠道，新增 `npm.channel: "github-subdir"` 与
+  `npm.install`，`publish` 改成「未发布（无账号），将来要发的步骤是……」。
+  键名仍叫 `npm`（`tests/npm-packages.mjs` 读 `manifest.npm.packages`）。
+- `tests/npm-packages.mjs`：每包 README 断言含
+  `github:wowayou/mydsh#path:/client/<名>` 与 `#<sha>&path:/client/<名>`、且**不含**
+  `add @wowayou/`；主 README 同样四项 + 一项。这条断言就是防止文档再退回没验证过的写法。
+
+### 验证
+- 六套测试全绿：`npm-packages`（新增 5+16 项断言）/ `check-preset` / `vision-cli`（纯 node）、
+  `smoke` / `stress` / `stress2`（harness 内 tsx，0 告警）。
+- `grep -n npm client/*/README.md` 只剩 ui-annotate 那两句「没发到 npm」的说明。
+
+### 还没做
+- npm 发布：账号仍不存在，反爬网关未解。渠道已经不阻塞使用，等你哪天注册好再补一条。
+- 旧的 `~/.dsh/profiles/node_modules/@mydsh/`（四个惰性目录）仍等授权再删。

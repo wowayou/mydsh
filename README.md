@@ -46,21 +46,29 @@ configuration changes require a manual restart). A restart is required after
 the first install because the running process caches failed preset-plugin
 module resolution until then.
 
-### Install the browser plugins from npm (community flow)
+### Install a single browser plugin (community flow)
 
-The four browser plugins are standalone npm packages. Each one declares
-`dsh.bundle.patch`, so `dsh plugin` installs it into the profile *and* activates its
-plugin row — no YAML editing:
+The four browser plugins are standalone packages living in subdirectories of this repo.
+Each one declares `dsh.bundle.patch`, so `dsh plugin` installs it into the profile *and*
+activates its plugin row — no YAML editing, no repo clone:
 
 ```bash
-dsh plugin --profile web add @wowayou/ui-notify
-dsh plugin --profile web add @wowayou/ui-session-tabs
-dsh plugin --profile web add @wowayou/ui-video          # needs the host media route, see below
-dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview: notes are localStorage-only
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-session-tabs"
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-video"     # needs the host media route, see below
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-annotate"  # preview: notes are localStorage-only
 
-# pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w
-# verify: dsh --profile web --dump-config | grep mydsh
+# -w is required by pnpm 9 (a root add fails with ERR_PNPM_ADDING_TO_ROOT)
+# pin a commit instead of tracking main: #<sha>&path:/client/ui-notify
+# verify:    dsh --profile web --dump-config | grep mydsh
+# uninstall: dsh plugin --profile web remove @wowayou/ui-notify
 ```
+
+`dsh plugin` is a pnpm forwarder over `$DSH_HOME/profiles/<profile>`; pnpm resolves the
+`#path:` fragment to that subdirectory and honours the package's `files` allow-list, so what
+lands in `node_modules` is exactly the packaged `@wowayou/ui-*` (six files) — the package name
+is the same one npm would give you. These packages are **not on npm** (see `docs/design.md`
+§6b); this is the install route that is actually verified.
 
 | Package | What it is | Extra requirement |
 | --- | --- | --- |
@@ -72,7 +80,7 @@ dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview: notes are
 **Pick one path, not both.** `./install.sh` writes the same plugin rows into
 `$DSH_HOME/profiles/web/cordis.patch.yml` directly. Doing both puts two rows with the same
 id in the composed tree (verified with `--dump-config`), i.e. the plugin mounts twice.
-Installing from npm? Drop the `# ==== mydsh begin/end ====` block from your profile patch first.
+Using `dsh plugin`? Drop the `# ==== mydsh begin/end ====` block from your profile patch first.
 Each bundle also guards itself: the duplicate copy registers nothing and logs one
 `console.warn` naming the fix, so you never get two notifications for one completion.
 
@@ -81,7 +89,8 @@ no network, no telemetry, no `postinstall`, no host code patched or wrapped; the
 is `localStorage` under `mydsh.*`, size-capped so the origin quota shared with the dsh UI
 cannot be exhausted; a missing UI slot or service degrades to one `console.warn`; every
 package documents the dsh version it was verified against (`0.1.0-rc.5`) and its uninstall
-command. `@wowayou/ui-annotate` is `preview` on purpose — read its README first.
+command. `@wowayou/ui-annotate` is a deliberate preview (`0.1.0-preview.1`, notes the model
+cannot see) — read its README first.
 
 ### Install everything from the repo (host plugins, preset, skill)
 
@@ -167,7 +176,7 @@ mydsh/
 ├── up.sh                          # One-command deploy + restart + media verification
 ├── tests/{smoke.mjs, check-preset.mjs}   # Smoke tests + preset validation
 ├── tests/vision-cli.mjs           # Vision skill CLI tests (plain `node`, no harness deps)
-├── tests/npm-packages.mjs         # npm packaging checks for the four @wowayou client packages
+├── tests/npm-packages.mjs         # packaging checks for the four @wowayou client packages
 └── manifest.json                  # File → deploy target manifest
 ```
 
@@ -226,7 +235,7 @@ mydsh/
 ├── up.sh                          # 一键部署 + 重启 + media 边界验证
 ├── tests/{smoke.mjs, check-preset.mjs}   # 冒烟测试 + 预设解析校验
 ├── tests/vision-cli.mjs           # 视觉技能 CLI 测试（纯 node，不依赖 harness）
-├── tests/npm-packages.mjs         # 四个 @wowayou 客户端包的 npm 打包校验（纯 node）
+├── tests/npm-packages.mjs         # 四个 @wowayou 客户端包的打包校验（纯 node）
 └── manifest.json                  # 文件 → 部署目标清单
 ```
 
@@ -269,7 +278,7 @@ node /home/forbackup/Dev/mydsh/tests/check-preset.mjs
 # 视觉技能 CLI 测试（纯 node 即可，CLI 零依赖；内含本地假 provider）
 node /home/forbackup/Dev/mydsh/tests/vision-cli.mjs
 
-# 浏览器插件 npm 打包校验（纯 node；dsh.bundle.patch / files / 行 id 与 install.sh 一致性）
+# 浏览器插件打包校验（纯 node；dsh.bundle.patch / files / 行 id 与 install.sh 一致性）
 node /home/forbackup/Dev/mydsh/tests/npm-packages.mjs
 
 # sandbox 补丁单测
@@ -277,20 +286,27 @@ cd /home/forbackup/deepseek-harness
 pnpm vitest run packages/sandbox/sandbox/tests/escalation.spec.ts
 ```
 
-## 浏览器插件（npm 安装）
+## 浏览器插件（单独安装）
 
-四个浏览器插件是独立 npm 包，各自带 `dsh.bundle.patch`（包内 `cordis.patch.yml`），
-所以 `dsh plugin` 装完即生效，不用手改 YAML：
+四个浏览器插件是本仓库子目录下的独立包，各自带 `dsh.bundle.patch`（包内 `cordis.patch.yml`），
+所以 `dsh plugin` 装完即生效，不用手改 YAML、也不用 clone 仓库：
 
 ```bash
-dsh plugin --profile web add @wowayou/ui-notify
-dsh plugin --profile web add @wowayou/ui-session-tabs
-dsh plugin --profile web add @wowayou/ui-video              # 需要主机层媒体路由，见下
-dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview：批注只存 localStorage
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-session-tabs"
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-video"     # 需要主机层媒体路由，见下
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-annotate"  # preview：批注只存 localStorage
 
-# pnpm 9 会拒绝往 workspace root 加依赖（ERR_PNPM_ADDING_TO_ROOT）→ 加 -w
+# -w 是 pnpm 9 要的（不加会 ERR_PNPM_ADDING_TO_ROOT）
+# 不想跟着 main 走就钉 commit：#<sha>&path:/client/ui-notify
 # 验证：dsh --profile web --dump-config | grep mydsh
+# 卸载：dsh plugin --profile web remove @wowayou/ui-notify
 ```
+
+`dsh plugin` 是 `$DSH_HOME/profiles/<profile>` 上的 pnpm 转发器；pnpm 把 `#path:` 片段解析成
+仓库的那个子目录，并且照 `files` 白名单打包，所以落进 `node_modules` 的就是打包后的
+`@wowayou/ui-*`（六个文件），包名跟走 npm 一模一样。这四个包**没有发到 npm**
+（原因见 `docs/design.md` §6b），上面这条才是实测验证过的安装路径。
 
 | 包 | 是什么 | 额外前提 |
 | --- | --- | --- |
@@ -301,18 +317,18 @@ dsh plugin --profile web add @wowayou/ui-annotate@preview   # preview：批注�
 
 **两条路径只选一条。** `./install.sh` 会把同样的插件行直接写进
 `$DSH_HOME/profiles/web/cordis.patch.yml`；两条都走 → 组合后的 tree 里同一个 id 出现两行
-（已用 `--dump-config` 实测），插件会挂载两次。要走 npm 的话，先把 profile patch 里
+（已用 `--dump-config` 实测），插件会挂载两次。要走 `dsh plugin` 的话，先把 profile patch 里
 `# ==== mydsh begin/end ====` 这个 marker 块删掉。每个 bundle 自己也兜住了这一层：
 重复的那份不注册任何东西，只打一条告警说明该去掉哪条 —— 不会一次完成响两声。
 
 **对安装者的承诺**（这些代码跑在别人的页面上）：不联网、无遥测、无 `postinstall`、
 不改也不包宿主代码；只用 `mydsh.*` 的 `localStorage` 键且都有体积上限（origin 配额是和
 dsh UI 共享的，不能被插件吃满）；拿不到 UI 槽位/服务时退化成一条 `console.warn`；
-每个包都写明验证过的 dsh 版本（`0.1.0-rc.5`）与卸载命令。`@wowayou/ui-annotate` 故意留在
-`preview`，装之前先读它的 README。
+每个包都写明验证过的 dsh 版本（`0.1.0-rc.5`）与卸载命令。`@wowayou/ui-annotate` 故意停在
+preview（`0.1.0-preview.1`，批注模型看不见），装之前先读它的 README。
 
-主机插件 / 预设 / 技能仍然只从仓库装（`./install.sh`）—— 它们要落到 `$DSH_HOME` 的
-不同位置，不是 npm 包的形态。
+主机插件 / 预设 / 技能仍然只走 `./install.sh` —— 它们要落到 `$DSH_HOME` 的
+不同位置，不是单包的形态。
 
 ## 使用提示
 

@@ -34,6 +34,18 @@ DSH 有明确的 UI 插槽层级：
 
 正确做法：留待 v2 做完整的选中文本到加批注到followup对话。
 
+### 4. 文档只写实测过的命令（2026-08-21）
+
+四个浏览器插件的 README 和主 README 一度写着 `dsh plugin --profile web add @wowayou/ui-notify`
+（npm 安装），而这四个包从来没发到 npm —— 连账号都还没有。这条命令对任何人都是直接报
+404，而且是「照着官方文档做却失败」那种最难自查的失败。
+
+正确做法：分发渠道换成实测跑通的 GitHub 子目录路线
+（`dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"`），
+安装、`--dump-config` 里的行、`files` 白名单、commit 钉法、按包名卸载五项逐个验证之后
+才写进文档；README 里的安装 spec 由 `tests/npm-packages.mjs` 静态断言，防止哪天又退回
+没验证过的写法。**渠道没就绪不是写「将来能用」的理由，是换渠道的理由。**
+
 ## 踩坑记录
 
 ### 坑 1：React 隐藏标签页延迟 re-render

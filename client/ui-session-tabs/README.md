@@ -7,10 +7,10 @@ Part of [mydsh](https://github.com/wowayou/mydsh). Hand-written `__ModuleLoader_
 ## Install
 
 ```bash
-dsh plugin --profile web add @wowayou/ui-session-tabs
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-session-tabs"
 
-# pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w:
-#   dsh plugin --profile web add -w @wowayou/ui-session-tabs
+# pin a commit (a branch install tracks whatever main holds at install time):
+#   dsh plugin --profile web add -w "github:wowayou/mydsh#<sha>&path:/client/ui-session-tabs"
 
 # check the row made it into the composed tree:
 #   dsh --profile web --dump-config | grep mydsh
@@ -46,7 +46,7 @@ Visit `http://127.0.0.1:<port>/?session=<id>` by hand and you land on that sessi
   else — it never patches or wraps host code.
 - No network, no telemetry, no storage of its own. `window.open` and the clipboard write
   only ever happen from your click.
-- Installed twice (npm bundle layer **and** mydsh's repo rows), the duplicate copy registers
+- Installed twice (the `dsh plugin` bundle layer **and** mydsh's `install.sh` rows), the duplicate copy registers
   nothing and logs one `console.warn` naming the fix — so you never get two "⧉" buttons or a
   deep link opened twice.
 - Best-effort, single-maintainer, in the open — issues welcome, no SLA.
@@ -59,7 +59,8 @@ DSH 的**多会话新标签页**：会话头操作行「⧉」一键把 `?sessio
 （`localStorage` 只是重载种子，URL 每次覆盖）。侧栏底部「新建」按钮弹出工作区选择框，
 选定后在该工作区新建会话并新标签页打开（无工作区时退化为打开空白标签页）。
 
-安装：`dsh plugin --profile web add @wowayou/ui-session-tabs`（pnpm 9 会要求加 `-w`），然后刷新页面。
+安装：`dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-session-tabs"`，然后刷新页面（`-w` 是 pnpm 9 要的）。
+钉版本用 `#<sha>&path:/client/ui-session-tabs`（不钉就是安装那一刻 main 的内容）。
 手动访问 `http://127.0.0.1:<端口>/?session=<id>` 也能直达某个会话。
 
 对 dsh `0.1.0-rc.5`（web profile）验证过；按名字注册 UI 槽位，宿主换名字最多打一条

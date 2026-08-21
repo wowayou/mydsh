@@ -229,19 +229,20 @@ per-provider headers.user-agent  >  DSH_APP_PRODUCT 环境变量  >  默认 deep
 
 `restart.sh` 支持 `DSH_UA_ALIAS` 快捷别名（cursor/claude-code/codex/opencode）。
 
-## 6b. 浏览器插件的 npm 形态（2026-08-21）
+## 6b. 浏览器插件的分发形态（2026-08-21）
 
 项目定位收窄之后（官方已覆盖的部分冻结），真正值得对外的就是四个浏览器插件 ——
-它们属于官方设计取向决定不会做的那类。要让社区「一条命令装上」，需要的不只是
-`npm publish`：
+它们属于官方设计取向决定不会做的那类。要让社区「一条命令装上」，需要的不只是把
+目录传上去：
 
 | 环节 | 做法 | 为什么 |
 | --- | --- | --- |
-| scope + 可见性 | `@wowayou/*`（**用户名 scope**）+ `publishConfig.access: public` | scoped 包默认私有，漏了就发不出去。用用户名 scope 而不是 `@mydsh` 组织：组织只能在 npmjs.com 网页上建（`npm org` 只有 `set`/`rm`/`ls`，没有 `create`），多一层要维护的东西；用户名 scope 登录即可发 |
-| 一条命令生效 | 每包声明 `dsh.bundle.patch: './cordis.patch.yml'`，patch 里 `- insert:` 自己的插件行 | `dsh plugin --profile web add <包>` 是 pnpm 转发器 + 状态对账：装完发现包声明了 `dsh.bundle` 就把它追加到 profile 的 `dsh.profile.bundles`，然后应用这一层 —— 用户不用手改 YAML。**不声明**的话 dsh 会打印 "declares no dsh.bundle — installed as a plain dependency" 并要求手工加行 |
-| 包内容 | `files: [lib, cordis.patch.yml, README.md, LICENSE]` | patch 文件忘了进 `files` → 装上去就是「bundle 声明了 patch 但文件不存在」，`profile.ts` 会 fail loud |
-| 预发布 | `@wowayou/ui-annotate` = `0.1.0-preview.1` + `publishConfig.tag: preview` | 它只存 localStorage、模型看不见（见 `POSTMORTEM.md`「不成熟的功能不要放」）；不能占 `latest` |
-| 回归 | `tests/npm-packages.mjs`（纯 node） | 以上每一条漏了都不会在本机报错，而是社区装的时候才炸 |
+| 分发渠道 | **GitHub 子目录**：`dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"` | `dsh plugin` 是 pnpm 转发器，pnpm 认 `#path:` 片段并照包的 `files` 白名单打包 —— 装出来跟走 npm 是同一份内容（实测 6 个文件、`--dump-config` 里就是那一行）。**没上 npm** 是因为还没有账号；不因此拖住分发，也不写没验证过的安装说明（见 `POSTMORTEM.md`「文档只写实测过的命令」）|
+| 包名 scope | `@wowayou/*`（**用户名 scope**）+ `publishConfig.access: public` | 包名不随渠道变：GitHub 装出来的 `node_modules` 目录名、卸载命令（`remove @wowayou/ui-video`，实测有效）都用这个名字。留 `access: public` 是为了将来真发 npm 时不会因为「scoped 包默认私有」发不出去。用用户名 scope 而不是 `@mydsh` 组织：组织只能在 npmjs.com 网页上建（`npm org` 只有 `set`/`rm`/`ls`，没有 `create`），多一层要维护的东西 |
+| 一条命令生效 | 每包声明 `dsh.bundle.patch: './cordis.patch.yml'`，patch 里 `- insert:` 自己的插件行 | `dsh plugin --profile web add <spec>` 是 pnpm 转发器 + 状态对账：装完发现包声明了 `dsh.bundle` 就把它追加到 profile 的 `dsh.profile.bundles`，然后应用这一层 —— 用户不用手改 YAML。**不声明**的话 dsh 会打印 "declares no dsh.bundle — installed as a plain dependency" 并要求手工加行 |
+| 包内容 | `files: [lib, cordis.patch.yml, README.md, LICENSE]` | patch 文件忘了进 `files` → 装上去就是「bundle 声明了 patch 但文件不存在」，`profile.ts` 会 fail loud。GitHub 路线同样吃这份白名单，所以漏了照样炸 |
+| 版本钉法 | `#<sha>&path:/client/<名>`；不钉就是安装那一刻 `main` 的内容 | GitHub 路线没有 registry 的语义化版本；`#path:` 单独用等于跟着分支走。四个包自己的 `version` 仍然维护（`@wowayou/ui-annotate` = `0.1.0-preview.1` + `publishConfig.tag: preview`，它只存 localStorage、模型看不见，见 `POSTMORTEM.md`「不成熟的功能不要放」，不能占 `latest`）|
+| 回归 | `tests/npm-packages.mjs`（纯 node） | 以上每一条漏了都不会在本机报错，而是社区装的时候才炸；README 里的安装 spec 也在这里断言，防止文档退回没验证过的写法 |
 
 **包名有三处必须完全一致**（改 scope 时这是硬约束，不是风格问题）：
 
@@ -252,18 +253,19 @@ per-provider headers.user-agent  >  DSH_APP_PRODUCT 环境变量  >  默认 deep
 
 `system.ts` 的 `arrive()` 在 bundle 执行完之后检查「这个 id 注册了吗」，没注册就抛
 `bundle <url> loaded without registering "<id>"`。所以 `install.sh` 的
-`CLIENT_ROOT`（部署目录的 scope）也必须跟包名同 scope —— 部署副本和 npm 副本是同一份
-`lib/client.js`，里面只有一个 `id`，两条路径不能各用一个 scope。
+`CLIENT_ROOT`（部署目录的 scope）也必须跟包名同 scope —— 部署副本和 `dsh plugin` 装的副本
+是同一份 `lib/client.js`，里面只有一个 `id`，两条路径不能各用一个 scope。
 
 **两条安装路径互斥**：`install.sh` 把插件行直接写进 profile 自己的
-`cordis.patch.yml`；npm 装的话行来自包的 bundle 层。两条都走 → 组合后的 tree 里
+`cordis.patch.yml`；`dsh plugin` 装的话行来自包的 bundle 层。两条都走 → 组合后的 tree 里
 同一个 id 出现两行（`dsh --profile web --dump-config` 实测），插件挂载两次
 （通知会响两遍）。README 两语言都写明「只选一条」。
 
 **ui-video 只有浏览器半边**：播放地址 `/mydsh-media/<路径>` 由主机层 `host/media.ts`
-提供（媒体扩展名白名单 + Origin 校验 + Range）。没把它一起塞进 npm 包，是因为那份
-是安全相关代码，复制成两份就是 `vision-core` 之前那种负债；要做就单独发
-`@wowayou/host-media` 让 ui-video 依赖它 —— 留待需要时再做。README 里写明前提。
+提供（媒体扩展名白名单 + Origin 校验 + Range）。没把它一起塞进插件包，是因为那份
+是安全相关代码，复制成两份就是 `vision-core` 之前那种负债；要做就单独出一个
+`@wowayou/host-media` 让 ui-video 依赖它 —— 留待需要时再做。README 里写明前提，
+并且只装浏览器半边时播放器会自己退化成原链接（见 6b.1）。
 
 ### 6b.1 「不伤害安装者」清单（2026-08-21）
 
@@ -272,7 +274,7 @@ bug，而是**只在别人机器上才显形**的副作用：
 
 | 向量 | 之前 | 现在 |
 | --- | --- | --- |
-| 重复挂载 | 仓库 patch 行 + npm bundle 层都装 → 同 id 两行 → 监听器两份、一次完成响两声 | 每个 bundle 用 `window.__mydsh*Mounts` 计数认领唯一挂载权；重复那份不注册，只打一条写清「去掉哪条安装路径 + 用 `--dump-config` 自查」的告警。计数跟 `ctx.effect` 生命周期回落，HMR 重挂不误报 |
+| 重复挂载 | 仓库 patch 行 + `dsh plugin` bundle 层都装 → 同 id 两行 → 监听器两份、一次完成响两声 | 每个 bundle 用 `window.__mydsh*Mounts` 计数认领唯一挂载权；重复那份不注册，只打一条写清「去掉哪条安装路径 + 用 `--dump-config` 自查」的告警。计数跟 `ctx.effect` 生命周期回落，HMR 重挂不误报 |
 | localStorage 配额 | 自定义提示音 `readAsDataURL` 无上限写进 localStorage；批注库无总量上限 | 提示音 512 KiB（在读文件**之前**按 `file.size` 拒），批注库总量 256 KiB。配额是**整个 origin 共享**的 —— 宿主 UI 自己的设置/草稿在同一份里，插件把它吃满就是宿主写入开始失败 |
 | 静默失败 | `saveCustomSound(...).catch(function() {})`、`saveAll` 吞 quota 异常 | reject 带 `code`（`too-big`/`quota`/`read-failed`），设置行里直接显示原因；批注写不进去就保留输入框内容并显示「库已满」。删除写入永远放行（否则升级前存下的超限旧库会把人锁在「删不掉也存不下」） |
 | 没有关声音的开关 | 只能上传一个静音音频，或卸插件 | 设置行加「静音」：只弹通知不发声，「试听」不受影响 |

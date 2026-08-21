@@ -7,16 +7,19 @@ Part of [mydsh](https://github.com/wowayou/mydsh). Hand-written `__ModuleLoader_
 ## Install
 
 ```bash
-dsh plugin --profile web add @wowayou/ui-notify
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"
 
-# pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w:
-#   dsh plugin --profile web add -w @wowayou/ui-notify
+# pin a commit (a branch install tracks whatever main holds at install time):
+#   dsh plugin --profile web add -w "github:wowayou/mydsh#<sha>&path:/client/ui-notify"
 
 # check the row made it into the composed tree:
 #   dsh --profile web --dump-config | grep mydsh
 ```
 
-`dsh plugin` is a pnpm forwarder over `$DSH_HOME/profiles/<profile>`; this package declares
+`-w` is required by pnpm 9 (a root add without it fails with `ERR_PNPM_ADDING_TO_ROOT`).
+`dsh plugin` is a pnpm forwarder over `$DSH_HOME/profiles/<profile>`, and pnpm resolves the
+`#path:` fragment to this subdirectory of the repo, so you get exactly the packaged `@wowayou/ui-notify`
+(the `files` allow-list applies — six files, no repo checkout). This package declares
 `dsh.bundle.patch`, so dsh appends it to the profile's bundle list and its `cordis.patch.yml`
 inserts the plugin row. Reload the browser tab afterwards.
 
@@ -55,7 +58,7 @@ the same tab also pings.
 - Requires notification permission; the browser asks on first use.
 - Chromium autoplay policy: the sound needs one prior user interaction in the tab.
 - No network, no telemetry. Only `localStorage` keys `mydsh.notify.*`.
-- Installed twice (npm bundle layer **and** mydsh's repo rows), the duplicate copy
+- Installed twice (the `dsh plugin` bundle layer **and** mydsh's `install.sh` rows), the duplicate copy
   registers nothing and logs one `console.warn` telling you which install path to drop —
   so you never get two notifications per completion.
 
@@ -76,7 +79,8 @@ DSH 的**任务完成提醒**（浏览器端）：一轮 agent 结束时弹 `Not
 通知标题带会话名，多任务不混；后台标签页标题闪 `[✓] 任务名`；点击通知定位并打开该会话；
 多标签跨标签去重（同一次完成只响一次）；提示音可在 设置 → 通用 里换成自定义音频。
 
-安装：`dsh plugin --profile web add @wowayou/ui-notify`（pnpm 9 会要求加 `-w`），然后刷新页面。
+安装：`dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-notify"`，然后刷新页面（`-w` 是 pnpm 9 要的）。
+钉版本用 `#<sha>&path:/client/ui-notify`（不钉就是安装那一刻 main 的内容）。
 
 需要通知权限；Chromium 的自动播放策略要求标签页里先有过一次用户交互，声音才会响。
 不联网、无遥测，只用 `localStorage` 的 `mydsh.notify.*`。自定义音频有 **512 KB 上限**

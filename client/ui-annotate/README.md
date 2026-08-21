@@ -7,17 +7,17 @@ Codex-style **annotations on assistant replies** for [DeepSeek Harness](https://
 > model **cannot see them** — so you cannot use an annotation to actually tell the model
 > anything. The parent project ([mydsh](https://github.com/wowayou/mydsh)) therefore does
 > **not** deploy this plugin by default; see `docs/POSTMORTEM.md` → "不成熟的功能不要放"
-> (an incomplete feature is worse than no feature). It is published under the `preview`
-> dist-tag for people who want a local scratchpad anyway. The full flow
+> (an incomplete feature is worse than no feature). It is **not on npm**; install it from the
+> repo subdirectory below if you want a local scratchpad anyway. The full flow
 > (select text → annotate → follow-up turn) is left for v2.
 
 ## Install
 
 ```bash
-dsh plugin --profile web add @wowayou/ui-annotate@preview
+dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-annotate"
 
-# pnpm 9 refuses a root add (ERR_PNPM_ADDING_TO_ROOT) — pass -w:
-#   dsh plugin --profile web add -w @wowayou/ui-annotate@preview
+# pin a commit (a branch install tracks whatever main holds at install time):
+#   dsh plugin --profile web add -w "github:wowayou/mydsh#<sha>&path:/client/ui-annotate"
 
 # check the row made it into the composed tree:
 #   dsh --profile web --dump-config | grep mydsh
@@ -64,10 +64,11 @@ DSH 的**回复批注**（Codex 式）：选中助手回复里的文字 → 点�
 
 > **状态：preview，功能故意不完整。** 批注只存 `localStorage`，不进对话历史，
 > 模型看不见 —— 你无法靠批注真的对模型说话。所以 mydsh 主项目默认不部署它
-> （见仓库 `docs/POSTMORTEM.md`「不成熟的功能不要放」），这里以 `preview` 标签发布，
-> 给只想要一个本地便签的人。完整流程（选中 → 批注 → followup 对话）留给 v2。
+> （见仓库 `docs/POSTMORTEM.md`「不成熟的功能不要放」），**也没发到 npm**；
+> 只想要一个本地便签的话按下面从仓库子目录装。完整流程（选中 → 批注 → followup 对话）留给 v2。
 
-安装：`dsh plugin --profile web add @wowayou/ui-annotate@preview`（pnpm 9 会要求加 `-w`），然后刷新页面。
+安装：`dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/ui-annotate"`，然后刷新页面（`-w` 是 pnpm 9 要的）。
+钉版本用 `#<sha>&path:/client/ui-annotate`（不钉就是安装那一刻 main 的内容）。
 数据在 `localStorage` 的 `mydsh.annotations.v1`，按 `会话:消息` 分桶；清站点数据即丢。
 单条 ≤ 2000 字、摘录 ≤ 500 字、**整库 ≤ 256 KB**（localStorage 配额是整个 origin 共享的，
 不能让批注把宿主 UI 的写入挤掉）；到顶后新增会被拒绝并显示原因，删除永远放行。

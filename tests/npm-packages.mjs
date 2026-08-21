@@ -1,10 +1,11 @@
-// mydsh 客户端插件的 npm 打包校验（纯 node，不依赖 harness）。
+// mydsh 客户端插件的打包校验（纯 node，不依赖 harness）。
 //
-// 这四个包要能被社区用 `dsh plugin --profile web add @wowayou/<name>` 一条命令装上，
+// 这四个包要能被社区用一条命令装上（当前渠道是 GitHub 子目录：
+// `dsh plugin --profile web add -w "github:wowayou/mydsh#path:/client/<name>"`），
 // 靠的是 package.json 里的 `dsh.bundle.patch` + 包内 cordis.patch.yml：
 // dsh 装完把包名追加到 profile 的 `dsh.profile.bundles`，再应用这一层把插件行
 // 插进 loader tree。任一环节漏了（patch 文件没进 files、行 id 与 install.sh 不一致、
-// 忘了 publishConfig.access）都不会在本机报错，而是等社区装的时候才炸。
+// README 里的安装 spec 写成没验证过的形式）都不会在本机报错，而是等社区装的时候才炸。
 //
 // 用法: node tests/npm-packages.mjs
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -24,7 +25,7 @@ const dirs = readdirSync(CLIENT, { withFileTypes: true }).filter((e) => e.isDire
 check('client/ 下有包', dirs.length > 0)
 
 // install.sh 写进 profile patch 的插件行 id（同一批 id 必须与包内 patch 一致，
-// 否则「仓库部署」与「npm 安装」两条路径给出的是两个不同的行）。
+// 否则「仓库部署」与「dsh plugin 安装」两条路径给出的是两个不同的行）。
 const installSh = readFileSync(join(PROJECT, 'install.sh'), 'utf8')
 // manifest.json 记录了同一批包与 tag，漏登记就会和 README 说的对不上。
 const manifest = JSON.parse(readFileSync(join(PROJECT, 'manifest.json'), 'utf8'))
@@ -113,6 +114,12 @@ for (const name of dirs) {
     const readme = readFileSync(readmePath, 'utf8')
     check('README 声明了验证过的 dsh 版本', readme.includes('dsh `0.1.0-rc.5`'))
     check('README 写了卸载方式', readme.includes(`remove ${pkg.name}`))
+    // 分发渠道是 GitHub 子目录（实测跑通的那条）。写成 npm 安装就是让人跑一条 404 的命令
+    // —— 见 docs/POSTMORTEM.md「文档只写实测过的命令」。
+    check('README 写的是实测过的 GitHub 子目录安装 spec',
+      readme.includes(`github:wowayou/mydsh#path:/client/${name}`))
+    check('README 写了 commit 钉法', readme.includes(`#<sha>&path:/client/${name}`))
+    check('README 没有未验证的 npm 安装命令', !/add\s+@wowayou\//.test(readme))
   }
 
   // manifest.json 的 npm 登记与包本身对齐（版本 + preview tag）。
@@ -126,5 +133,14 @@ for (const name of dirs) {
   }
 }
 
-console.log(failures === 0 ? '\nnpm 打包校验通过 ✔' : `\n${failures} 项失败 ✘`)
+// 主 README 也不能停留在没验证过的 npm 安装路线上。
+const rootReadme = readFileSync(join(PROJECT, 'README.md'), 'utf8')
+console.log('\n[README.md（主）]')
+for (const name of dirs) {
+  check(`${name} 的安装 spec 是 GitHub 子目录`,
+    rootReadme.includes(`github:wowayou/mydsh#path:/client/${name}`))
+}
+check('没有未验证的 npm 安装命令', !/add\s+@wowayou\//.test(rootReadme))
+
+console.log(failures === 0 ? '\n打包校验通过 ✔' : `\n${failures} 项失败 ✘`)
 process.exit(failures === 0 ? 0 : 1)
