@@ -928,7 +928,10 @@ dsh 页面上」把它们重审一遍，逐条堵掉**只在别人机器上才�
   `~/.dsh/profiles/web/cordis.patch.yml` 里恰好三行客户端插件（无 ui-annotate 行）。
 
 ### 还没做
-- **发布本身**：仍需 `npm login` + `npm org create mydsh`，然后逐包 `npm publish`
+- **发布本身**：仍需 `npm login` + 在 npmjs.com 建 `@mydsh` 组织，然后逐包 `npm publish`
+  （**没有 `npm org create` 这个命令** —— `npm org` 只有 `set` / `rm` / `ls`，
+  建组织只能在 https://www.npmjs.com/org/create 网页上做；公开包的组织免费。
+  不想建组织的话可以退回用户名 scope `@wowayou/*`，但那要改四个包名）
   （`@mydsh/ui-annotate` 带 `--tag preview`）。不可逆的对外动作，等你点头。
 - `~/.dsh/profiles/node_modules/@mydsh/ui-annotate` 有个早先留下的空壳目录，
   没有任何 patch 行引用它（处于惰性状态）。删它属于删数据，等授权。
